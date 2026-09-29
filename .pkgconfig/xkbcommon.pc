@@ -1,6 +1,6 @@
 prefix=/usr
 includedir=${prefix}/include
-libdir=${prefix}/lib/x86_64-linux-gnu
+libdir=${pcfiledir}/lib
 
 Name: xkbcommon
 Description: XKB API common to servers and clients
