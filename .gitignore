@@ -1,0 +1,17 @@
+# Rust build target
+/target
+
+# Development & temporary files
+*.tmp
+*.log
+*.swp
+*.bak
+*~
+
+# COSMIC Notes sidecar cache/indexes (user vault artifacts)
+.cosmic-notes/index/
+.cosmic-notes/cache/
+
+# OS specific files
+.DS_Store
+Thumbs.db

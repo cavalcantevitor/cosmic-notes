@@ -1,0 +1,36 @@
+[package]
+name = "cosmic-notes"
+version = "0.1.0"
+edition = "2024"
+authors = ["COSMIC Notes Team"]
+description = "Native, high-performance, local-first Markdown notes app for the COSMIC Desktop Environment"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+# GUI & COSMIC Desktop
+libcosmic = { git = "https://github.com/pop-os/libcosmic.git", features = ["wgpu", "markdown"] }
+
+# Async runtime & filesystem
+tokio = { version = "1.43", features = ["full"] }
+notify = "8.0"
+notify-debouncer-full = "0.5"
+walkdir = "2.5"
+dirs = "6.0"
+trash = "5.2"
+
+# Search, indexing & graph
+tantivy = "0.22"
+nucleo = "0.5"
+petgraph = "0.7"
+
+# Markdown & Frontmatter
+pulldown-cmark = "0.13"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling & logging
+thiserror = "2.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
