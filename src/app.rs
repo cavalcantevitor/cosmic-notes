@@ -1,6 +1,7 @@
 use cosmic::app::Core;
 use cosmic::iced::Length;
 use cosmic::iced::Task;
+use cosmic::widget::text_editor::{self as te, Action as EditorAction, Content as EditorContent};
 use cosmic::widget::{self, button, container, scrollable, text, Column, Row};
 use cosmic::Element;
 use std::path::{Path, PathBuf};
@@ -19,6 +20,7 @@ pub enum Message {
     SelectNote(PathBuf),
     CreateNewNote,
     SetViewMode(ViewMode),
+    EditorAction(EditorAction),
     LinkClicked,
 }
 
@@ -28,6 +30,7 @@ pub struct AppModel {
     notes: Vec<Note>,
     selected_note_path: Option<PathBuf>,
     active_note: Option<Note>,
+    editor_content: EditorContent,
     parsed_markdown: Vec<widget::markdown::Item>,
     view_mode: ViewMode,
 }
@@ -63,7 +66,7 @@ COSMIC Notes is a native, high-performance, local-first note-taking app built sp
 - **Ultra-Fast**: Sub-millisecond dual-tier search and reactive filesystem monitoring.
 - **Write-Echo Cancellation**: Avoids file watcher loops when saving notes.
 
-Click **New Note** above to begin writing!
+Click **New Note** above or start editing right here!
 "#;
             if let Ok(welcome_note) = vault.write_note(Path::new("Welcome.md"), welcome_content) {
                 scanned.push(welcome_note);
@@ -72,6 +75,11 @@ Click **New Note** above to begin writing!
 
         let selected = scanned.first().map(|n| n.path.clone());
         let active = scanned.first().cloned();
+        let editor_content = active
+            .as_ref()
+            .map(|n| EditorContent::with_text(&n.raw_content))
+            .unwrap_or_else(EditorContent::new);
+
         let parsed_markdown = active
             .as_ref()
             .map(|n| widget::markdown::parse(&n.body).collect())
@@ -83,6 +91,7 @@ Click **New Note** above to begin writing!
             notes: scanned,
             selected_note_path: selected,
             active_note: active,
+            editor_content,
             parsed_markdown,
             view_mode: ViewMode::Split,
         };
@@ -138,6 +147,7 @@ impl cosmic::Application for AppModel {
         match message {
             Message::SelectNote(path) => {
                 if let Ok(note) = self.vault.read_note(&path) {
+                    self.editor_content = EditorContent::with_text(&note.raw_content);
                     self.parsed_markdown = widget::markdown::parse(&note.body).collect();
                     self.active_note = Some(note);
                     self.selected_note_path = Some(path);
@@ -148,10 +158,31 @@ impl cosmic::Application for AppModel {
                 let filename = format!("Untitled_{note_count}.md");
                 let initial_content = format!("# Untitled {}\n\nStart typing your note here...", note_count);
                 if let Ok(note) = self.vault.write_note(Path::new(&filename), &initial_content) {
+                    self.editor_content = EditorContent::with_text(&note.raw_content);
                     self.parsed_markdown = widget::markdown::parse(&note.body).collect();
                     self.selected_note_path = Some(note.path.clone());
                     self.active_note = Some(note.clone());
                     self.notes.push(note);
+                }
+            }
+            Message::EditorAction(action) => {
+                let is_edit = action.is_edit();
+                self.editor_content.perform(action);
+
+                if is_edit {
+                    let current_text = self.editor_content.text();
+                    // Live update parsed preview
+                    self.parsed_markdown = widget::markdown::parse(&current_text).collect();
+
+                    // Auto-save to vault with write-echo cancellation
+                    if let Some(ref path) = self.selected_note_path {
+                        if let Ok(updated_note) = self.vault.write_note(path, &current_text) {
+                            if let Some(n) = self.notes.iter_mut().find(|n| n.path == *path) {
+                                *n = updated_note.clone();
+                            }
+                            self.active_note = Some(updated_note);
+                        }
+                    }
                 }
             }
             Message::SetViewMode(mode) => {
@@ -226,24 +257,23 @@ impl cosmic::Application for AppModel {
             .height(Length::Fill)
             .padding(spacing.space_m);
 
-            let raw_view = container(
-                scrollable(
-                    text::body(&note.raw_content)
-                )
-                .height(Length::Fill)
-                .width(Length::Fill)
+            let editor_widget = container(
+                te::text_editor(&self.editor_content)
+                    .placeholder("Type your markdown note here...")
+                    .on_action(Message::EditorAction)
+                    .height(Length::Fill)
             )
             .width(Length::Fill)
             .height(Length::Fill)
             .padding(spacing.space_m);
 
             let body_surface: Element<'_, Self::Message> = match self.view_mode {
-                ViewMode::Editor => raw_view.into(),
+                ViewMode::Editor => editor_widget.into(),
                 ViewMode::Preview => preview_view.into(),
                 ViewMode::Split => {
                     Row::new()
                         .spacing(spacing.space_m)
-                        .push(container(raw_view).width(Length::FillPortion(1)))
+                        .push(container(editor_widget).width(Length::FillPortion(1)))
                         .push(container(preview_view).width(Length::FillPortion(1)))
                         .into()
                 }
