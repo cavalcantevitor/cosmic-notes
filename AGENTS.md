@@ -106,3 +106,32 @@ Every commit in this repository MUST strictly follow the [Conventional Commits v
 * [`.agents/skills/libcosmic-dev/references/search-and-indexing.md`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/.agents/skills/libcosmic-dev/references/search-and-indexing.md): Production implementation patterns for Tantivy BM25 full-text indexing and Nucleo fuzzy matching.
 * [`.agents/skills/libcosmic-dev/references/workspace-layout.md`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/.agents/skills/libcosmic-dev/references/workspace-layout.md): Implementation patterns for `pane_grid` split views and lazy-cached Markdown preview.
 
+---
+
+## 7. Current Project State & Session Handoff (Where to Continue)
+
+### Completed Components:
+1. **Repository & Build Setup**:
+   - Initialized Git repository on branch `main`.
+   - `Cargo.toml` configured with Rust 2024 edition (1.95+) and all core dependencies (`libcosmic`, `tokio`, `notify-debouncer-full`, `tantivy`, `nucleo`, `petgraph`, `trash`, `pulldown-cmark`, `serde_yaml`, `thiserror`, `anyhow`).
+   - Wayland `xkbcommon` linking configured via local `.pkgconfig/` and `.cargo/config.toml`.
+2. **Headless Vault Engine (`src/core/`)**:
+   - [`src/core/note.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/src/core/note.rs): Domain model, YAML frontmatter parsing, inline `#tag` extraction (skips headers/code blocks), and `[[wikilink]]` extraction.
+   - [`src/core/write_echo.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/src/core/write_echo.rs): Thread-safe `WriteEchoCache` preventing file watcher feedback loops during saves.
+   - [`src/core/vault.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/src/core/vault.rs): Local vault scanner, atomic file saves, sidecar `.cosmic-notes/.gitignore` setup, and safe trash deletion via `trash`.
+   - [`src/core/watcher.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/src/core/watcher.rs): Debounced background filesystem watcher (`notify-debouncer-full`) with write-echo filtering.
+   - [`tests/vault_integration.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/tests/vault_integration.rs): Full integration tests passing (write-echo cancellation and external file detection).
+3. **Interactive Desktop Application Shell (`src/app.rs` & `src/main.rs`)**:
+   - `cosmic::Application` implementation runnable via `cargo run`.
+   - Sidebar with note list navigation and "New Note" creation.
+   - Multi-line live text editor (`cosmic::widget::text_editor`) with automatic persistence to disk.
+   - View mode switching (**Edit** | **Split** | **Preview**) with live AST Markdown rendering.
+
+### Next Session Objective:
+* **Start Phase 2: Dual-Tier Search & Knowledge Graph Engine**:
+  - Implement Tier 1 fuzzy search in `src/search/fuzzy.rs` using `nucleo` for instant `Ctrl+P` file/tag switching (<0.1ms).
+  - Implement Tier 2 full-text BM25 indexing in `src/search/fulltext.rs` using `tantivy` inside `.cosmic-notes/index/` (<0.5ms).
+  - Implement graph topology in `src/graph/` using `petgraph` to map `[[wikilinks]]` and calculate backlinks.
+  - Wire search index updating to `VaultEvent` changes from `VaultWatcher`.
+
+
