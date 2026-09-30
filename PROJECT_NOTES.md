@@ -220,7 +220,9 @@ To integrate AI capabilities (local LLMs via Ollama/llama.cpp, cloud APIs, auto-
 | **Phase 2.5** | UI/UX & Native COSMIC Files Polish | **Completed** | Native COSMIC Files styling: top-left menu actions (`New Note`, `Edit`, `Split`, `Preview`), top-right search button adjacent to window controls, dark sidebar background, and borderless editor without focus rings. Cleaned clutter (removed tabs, breadcrumbs, pencil icon). |
 | **Phase 3** | Multi-Column COSMIC Shell & Context Drawer | **Completed** | Inline header search input, collapsible sidebar with toggle button, tag filtering, and right-hand inspector with telemetry, tags, and bidirectional links. |
 | **Phase 3.5** | Symmetrical 3-Pane Navigation & Polish | **Completed** | Full visual parity between Left Explorer and Right Inspector (docked 260px columns with `Container::Background`), removed artificial Library header, fixed `sidebar-places-symbolic` icon, and pill-rounded `widget::search_input`. |
-| **Phase 4** | Pane Grid Workspace & 120 FPS Lazy Rendering | **Next in Line** | Resizable split layout via `cosmic::widget::pane_grid`, cached preview with `iced::widget::lazy` keyed on `(note_id, content_hash)`. |
+| **Phase 4** | Pane Grid Workspace & 120 FPS Lazy Rendering | **Completed** | Resizable split layout via `cosmic::widget::pane_grid`, 120 FPS frame-rate protection with `cosmic::iced::widget::lazy` AST caching keyed on `(note_id, content_hash)`, synchronized cursor-driven scroll positioning, and zero compiler warnings (18/18 tests passing). |
+| **Phase 4.5** | UI/UX Quality Assurance & QoL Evaluation | **Completed** | Comprehensive Design QA audit in `QOL_REPORT.md` based on Business of Apps & AppLighter frameworks. Identified prioritized QoL enhancements (tooltips, shortcuts, zero-match search states). |
 | **Phase 5** | Quick Switcher & Full-Text Search Overlays | **Upcoming** | Global search palette modal (`Ctrl+P`) and full-text search results panel (`Ctrl+Shift+F`). |
 | **Phase 6** | Future-Proof Contracts (Git & AI/MCP) | **Upcoming** | `VaultSyncEngine` trait and `AgentVaultApi` MCP-ready tool abstraction. |
+
 

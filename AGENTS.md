@@ -162,11 +162,21 @@ Every commit in this repository MUST strictly follow the [Conventional Commits v
    - Fully documented all phases in `PROJECT_NOTES.md`.
    - Full test suite passing (17 unit tests + 1 integration test, 0 failures, 0 warnings).
 
+8. **Phase 4: Pane Grid Workspace & 120 FPS Lazy Rendering (`src/app.rs`)**:
+   - Resizable side-by-side split layout using `cosmic::widget::pane_grid`.
+   - 120 FPS frame-rate protection with `cosmic::iced::widget::lazy` AST caching keyed on `(note_id, content_hash)`, eliminating layout thrashing and AST re-parsing during cursor navigation and active typing.
+   - Synchronized cursor-driven scrolling in `Split` mode via `iced_scrollable::snap_to`.
+   - Full test suite passing (18/18 tests passing, 0 failures, 0 warnings).
+9. **Phase 4.5: Design QA & Quality of Life (QoL) Audit (`QOL_REPORT.md`)**:
+   - Comprehensive Design QA report written based on *Business of Apps* and *AppLighter* frameworks.
+   - Evaluated visual consistency, 120 FPS performance, reliability invariants, and workspace ergonomics.
+   - Prioritized minor usability enhancements: system tooltips, keyboard accelerators (`Ctrl+N`, `Ctrl+1/2/3`), and friendly zero-match search states.
+
 ### Next Session Objective:
-* **Start Phase 4: Pane Grid Workspace & 120 FPS Lazy Rendering**:
-  - Implement resizable split layout using `cosmic::widget::pane_grid`.
-  - Wrap rendered Markdown preview in `iced::widget::lazy` keyed on `(note_id, content_hash)` for 120 FPS frame-rate protection.
-  - Synchronized scrolling between editor and preview.
+* **Start Phase 5: Quick Switcher & Full-Text Search Overlays**:
+  - Global `Ctrl+P` modal quick-switcher with `nucleo` fuzzy matching.
+  - Global `Ctrl+Shift+F` full-text search overlay with Tantivy BM25 highlighted snippets.
+  - Implement prioritized QoL items from `QOL_REPORT.md` (tooltips and keyboard accelerators).
 
 
 
