@@ -133,6 +133,15 @@ Every commit in this repository MUST strictly follow the [Conventional Commits v
    - [`src/graph/mod.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/src/graph/mod.rs): Bidirectional knowledge graph (`petgraph`) resolving wikilinks, computing incoming backlinks, outgoing links, unresolved links, and orphan notes.
    - [`src/search/mod.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/src/search/mod.rs): Unified `VaultIndex` coordinator reactive to `VaultEvent` disk mutations.
    - Full test suite passing across all units and integration tests (16 unit tests + 1 integration test, 0 failures, 0 warnings).
+5. **Phase 2.5: UI/UX & Native COSMIC Files Polish (`src/app.rs` & `src/core/note.rs`)**:
+   - Realigned layout to match native **COSMIC Files** (`cosmic-files`):
+     - Top-left menu buttons: clean text buttons (`New Note`, `Edit`, `Split`, `Preview`).
+     - Top-right search button: `system-search-symbolic` toggle directly adjacent to window controls (`-`, `⤢`, `✕`).
+     - Left sidebar: Dark navy/slate background tone matching COSMIC Files sidebar (`Container::Background`), with vertical note items (document icon, title, formatted date, rounded selection highlight).
+     - Workspace: Borderless Markdown editor without active outline ring that blends seamlessly into the surface.
+     - Note telemetry: Word count, character count, estimated reading time, and formatted dates.
+   - Reference design approved as **UI v3** (`cosmic_notes_ui_v3.jpg`).
+   - Full test suite passing (17 unit tests + 1 integration test, 0 failures, 0 warnings).
 
 ### Next Session Objective:
 * **Start Phase 3: Multi-Column COSMIC Shell & Context Drawer**:

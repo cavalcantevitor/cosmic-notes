@@ -180,7 +180,67 @@ impl Note {
             Ok((None, content.to_string()))
         }
     }
+
+    /// Count words in the note body.
+    pub fn word_count(&self) -> usize {
+        self.body.split_whitespace().count()
+    }
+
+    /// Count characters in the note body.
+    pub fn char_count(&self) -> usize {
+        self.body.chars().count()
+    }
+
+    /// Estimated reading time in minutes (assuming 200 WPM).
+    pub fn reading_time_mins(&self) -> usize {
+        let words = self.word_count();
+        (words / 200).max(1)
+    }
+
+    /// Extract a clean 1-line excerpt for note list cards.
+    pub fn excerpt(&self, max_chars: usize) -> String {
+        for line in self.body.lines() {
+            let trimmed = line.trim();
+            // Skip empty lines, headings, frontmatter/code blocks, or tag lines
+            if trimmed.is_empty()
+                || trimmed.starts_with('#')
+                || trimmed.starts_with("```")
+                || trimmed.starts_with("---")
+            {
+                continue;
+            }
+
+            // Strip leading list bullets, blockquotes, or wikilink brackets
+            let cleaned = trimmed
+                .trim_start_matches(|c| c == '-' || c == '*' || c == '>' || c == ' ')
+                .replace("[[", "")
+                .replace("]]", "");
+
+            if cleaned.is_empty() {
+                continue;
+            }
+
+            if cleaned.chars().count() > max_chars {
+                let truncated: String = cleaned.chars().take(max_chars).collect();
+                return format!("{truncated}…");
+            } else {
+                return cleaned;
+            }
+        }
+        "No additional text".to_string()
+    }
+
+    /// Format modified date cleanly (e.g. "Sep 29" or "HH:MM").
+    pub fn formatted_date(&self) -> String {
+        let now = Utc::now();
+        if self.modified_at.date_naive() == now.date_naive() {
+            self.modified_at.format("%H:%M").to_string()
+        } else {
+            self.modified_at.format("%b %d").to_string()
+        }
+    }
 }
+
 
 pub fn calculate_content_hash(content: &str) -> u64 {
     let mut hasher = DefaultHasher::new();
@@ -414,4 +474,24 @@ Don't forget #workflow/automation and #performance.
 
         assert_eq!(note.title, "random_thoughts");
     }
+
+    #[test]
+    fn test_note_telemetry_and_excerpt() {
+        let raw = "# Note Title\n\n- [[Target Link]] This is the first sentence for preview.\nAnd here is a second line.";
+        let note = Note::parse(
+            PathBuf::from("test.md"),
+            PathBuf::from("/vault/test.md"),
+            raw.to_string(),
+            Utc::now(),
+        )
+        .unwrap();
+
+        assert_eq!(note.word_count(), 19);
+        assert_eq!(note.reading_time_mins(), 1);
+
+        let excerpt = note.excerpt(30);
+        assert!(excerpt.starts_with("Target Link This is the"));
+        assert!(excerpt.ends_with('…'));
+    }
 }
+

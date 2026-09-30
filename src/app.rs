@@ -24,6 +24,8 @@ pub enum Message {
     EditorAction(EditorAction),
     LinkClicked,
     SearchInputChanged(String),
+    ToggleSearch,
+    CloseNoteTab(PathBuf),
     VaultFileEvent(VaultEvent),
 }
 
@@ -32,12 +34,14 @@ pub struct AppModel {
     vault: Vault,
     vault_index: VaultIndex,
     notes: Vec<Note>,
+    open_tabs: Vec<PathBuf>,
     selected_note_path: Option<PathBuf>,
     active_note: Option<Note>,
     editor_content: EditorContent,
     parsed_markdown: Vec<widget::markdown::Item>,
     view_mode: ViewMode,
     search_query: String,
+    search_active: bool,
 }
 
 impl AppModel {
@@ -96,23 +100,26 @@ Click **New Note** above or start editing right here!
             .map(|n| widget::markdown::parse(&n.body).collect())
             .unwrap_or_default();
 
+        let open_tabs = selected.iter().cloned().collect();
+
         let app = Self {
             core,
             vault,
             vault_index,
             notes: scanned,
+            open_tabs,
             selected_note_path: selected,
             active_note: active,
             editor_content,
             parsed_markdown,
             view_mode: ViewMode::Split,
             search_query: String::new(),
+            search_active: false,
         };
 
         (app, Task::none())
     }
 }
-
 
 impl cosmic::Application for AppModel {
     type Executor = cosmic::executor::Default;
@@ -133,33 +140,52 @@ impl cosmic::Application for AppModel {
     }
 
     fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
-        let count_text = format!("{} notes", self.notes.len());
+        let app_icon = widget::icon::from_name("accessories-text-editor-symbolic").size(18);
+
+        let menu_btn = |label: &'static str, msg: Message, is_active: bool| {
+            let b = button::text(label)
+                .class(if is_active {
+                    cosmic::theme::Button::Suggested
+                } else {
+                    cosmic::theme::Button::Text
+                })
+                .on_press(msg);
+            b.into()
+        };
+
         vec![
-            text::title3("COSMIC Notes").into(),
-            text::body(count_text).into(),
+            app_icon.into(),
+            menu_btn("New Note", Message::CreateNewNote, false),
+            menu_btn("Edit", Message::SetViewMode(ViewMode::Editor), self.view_mode == ViewMode::Editor),
+            menu_btn("Split", Message::SetViewMode(ViewMode::Split), self.view_mode == ViewMode::Split),
+            menu_btn("Preview", Message::SetViewMode(ViewMode::Preview), self.view_mode == ViewMode::Preview),
         ]
     }
 
     fn header_end(&self) -> Vec<Element<'_, Self::Message>> {
-        vec![
-            button::text("New Note")
-                .on_press(Message::CreateNewNote)
-                .into(),
-            button::text("Edit")
-                .on_press(Message::SetViewMode(ViewMode::Editor))
-                .into(),
-            button::text("Split")
-                .on_press(Message::SetViewMode(ViewMode::Split))
-                .into(),
-            button::text("Preview")
-                .on_press(Message::SetViewMode(ViewMode::Preview))
-                .into(),
-        ]
+        let search_icon_name = if self.search_active {
+            "edit-clear-symbolic"
+        } else {
+            "system-search-symbolic"
+        };
+
+        let search_btn = button::icon(widget::icon::from_name(search_icon_name).size(18))
+            .class(if self.search_active {
+                cosmic::theme::Button::Suggested
+            } else {
+                cosmic::theme::Button::Text
+            })
+            .on_press(Message::ToggleSearch);
+
+        vec![search_btn.into()]
     }
 
     fn update(&mut self, message: Self::Message) -> Task<cosmic::Action<Self::Message>> {
         match message {
             Message::SelectNote(path) => {
+                if !self.open_tabs.contains(&path) {
+                    self.open_tabs.push(path.clone());
+                }
                 if let Ok(note) = self.vault.read_note(&path) {
                     self.editor_content = EditorContent::with_text(&note.raw_content);
                     self.parsed_markdown = widget::markdown::parse(&note.body).collect();
@@ -175,6 +201,7 @@ impl cosmic::Application for AppModel {
                     let _ = self.vault_index.update_note(&note);
                     self.editor_content = EditorContent::with_text(&note.raw_content);
                     self.parsed_markdown = widget::markdown::parse(&note.body).collect();
+                    self.open_tabs.push(note.path.clone());
                     self.selected_note_path = Some(note.path.clone());
                     self.active_note = Some(note.clone());
                     self.notes.push(note);
@@ -208,6 +235,31 @@ impl cosmic::Application for AppModel {
             Message::SearchInputChanged(query) => {
                 self.search_query = query;
             }
+            Message::ToggleSearch => {
+                self.search_active = !self.search_active;
+                if !self.search_active {
+                    self.search_query.clear();
+                }
+            }
+            Message::CloseNoteTab(path) => {
+                self.open_tabs.retain(|p| p != &path);
+                if self.selected_note_path.as_ref() == Some(&path) {
+                    let next = self.open_tabs.last().cloned();
+                    if let Some(next_path) = next {
+                        if let Ok(note) = self.vault.read_note(&next_path) {
+                            self.editor_content = EditorContent::with_text(&note.raw_content);
+                            self.parsed_markdown = widget::markdown::parse(&note.body).collect();
+                            self.active_note = Some(note);
+                            self.selected_note_path = Some(next_path);
+                        }
+                    } else {
+                        self.active_note = None;
+                        self.selected_note_path = None;
+                        self.editor_content = EditorContent::new();
+                        self.parsed_markdown.clear();
+                    }
+                }
+            }
             Message::VaultFileEvent(event) => {
                 let _ = self.vault_index.handle_vault_event(&event, &self.vault);
                 if let Ok(scanned) = self.vault.scan_notes() {
@@ -221,110 +273,156 @@ impl cosmic::Application for AppModel {
     fn view(&self) -> Element<'_, Self::Message> {
         let spacing = cosmic::theme::spacing();
 
-        // Left sidebar: Search bar + Note list
-        let search_bar = widget::text_input("Search notes (Ctrl+P)...", &self.search_query)
-            .on_input(Message::SearchInputChanged)
-            .width(Length::Fill);
+        // 1. Left sidebar pane: COSMIC Files styling
+        let sidebar_header = Row::new()
+            .spacing(spacing.space_xs)
+            .align_y(cosmic::iced::Alignment::Center)
+            .push(widget::icon::from_name("folder-symbolic").size(16))
+            .push(text::body("Markdown Notes").width(Length::Fill));
+
+        let mut sidebar_col = Column::new()
+            .spacing(spacing.space_xs)
+            .push(sidebar_header);
+
+        if self.search_active {
+            let search_bar = widget::text_input("Search notes...", &self.search_query)
+                .on_input(Message::SearchInputChanged)
+                .width(Length::Fill);
+            sidebar_col = sidebar_col.push(search_bar);
+        }
+
+        sidebar_col = sidebar_col.push(widget::divider::horizontal::default());
+
+        let render_note_item = |note: &Note, is_selected: bool| -> Element<'static, Message> {
+            let title = if note.title.is_empty() {
+                "Untitled".to_string()
+            } else {
+                note.title.clone()
+            };
+
+            let doc_icon = widget::icon::from_name("text-x-generic-symbolic").size(16);
+
+            let row_content = Row::new()
+                .spacing(spacing.space_xs)
+                .align_y(cosmic::iced::Alignment::Center)
+                .push(doc_icon)
+                .push(text::body(title).width(Length::Fill))
+                .push(text::caption(note.formatted_date()));
+
+            let mut item_btn = button::custom(row_content)
+                .width(Length::Fill)
+                .padding([spacing.space_xxs, spacing.space_xs])
+                .on_press(Message::SelectNote(note.path.clone()));
+
+            if is_selected {
+                item_btn = item_btn.class(cosmic::theme::Button::Suggested);
+            } else {
+                item_btn = item_btn.class(cosmic::theme::Button::Text);
+            }
+
+            item_btn.into()
+        };
 
         let mut note_items = Column::new().spacing(spacing.space_xxs);
 
         if self.search_query.trim().is_empty() {
             for note in &self.notes {
                 let is_selected = self.selected_note_path.as_ref() == Some(&note.path);
-                let title = if note.title.is_empty() {
-                    "Untitled"
-                } else {
-                    &note.title
-                };
-
-                let mut note_btn = button::text(title.to_string())
-                    .width(Length::Fill)
-                    .on_press(Message::SelectNote(note.path.clone()));
-
-                if is_selected {
-                    note_btn = note_btn.class(cosmic::theme::Button::Suggested);
-                } else {
-                    note_btn = note_btn.class(cosmic::theme::Button::Text);
-                }
-
-                note_items = note_items.push(note_btn);
+                note_items = note_items.push(render_note_item(note, is_selected));
             }
         } else {
             let matches_index = self.vault_index.quick_search(&self.search_query, 50);
             for m in matches_index {
-
                 let is_selected = self.selected_note_path.as_ref() == Some(&m.item.path);
-                let title = if m.item.title.is_empty() {
-                    "Untitled"
-                } else {
-                    &m.item.title
-                };
-
-                let mut note_btn = button::text(title.to_string())
-                    .width(Length::Fill)
-                    .on_press(Message::SelectNote(m.item.path.clone()));
-
-                if is_selected {
-                    note_btn = note_btn.class(cosmic::theme::Button::Suggested);
-                } else {
-                    note_btn = note_btn.class(cosmic::theme::Button::Text);
+                if let Some(note) = self.notes.iter().find(|n| n.path == m.item.path) {
+                    note_items = note_items.push(render_note_item(note, is_selected));
                 }
-
-                note_items = note_items.push(note_btn);
             }
         }
 
         let sidebar = container(
-            Column::new()
-                .spacing(spacing.space_s)
-                .push(search_bar)
-                .push(widget::divider::horizontal::default())
-                .push(scrollable(note_items).width(Length::Fill).height(Length::Fill))
+            sidebar_col.push(scrollable(note_items).width(Length::Fill).height(Length::Fill))
         )
-        .width(Length::Fixed(260.0))
+        .class(cosmic::theme::Container::Background)
+        .width(Length::Fixed(240.0))
         .padding(spacing.space_s);
 
-        // Center content area: Active note view
+        // 2. Main Workspace Area
         let center_content: Element<'_, Self::Message> = if let Some(ref note) = self.active_note {
-            let title_header = text::title2(&note.title);
+            // A. Tab Bar
+            let mut tab_row = Row::new().spacing(spacing.space_xs);
+            for tab_path in &self.open_tabs {
+                let is_active = self.selected_note_path.as_ref() == Some(tab_path);
+                let tab_title = tab_path
+                    .file_name()
+                    .map(|f| f.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "Note".to_string());
 
-            let tags_row = if !note.tags.is_empty() {
-                let mut r = Row::new().spacing(spacing.space_xs);
-                for tag in &note.tags {
-                    r = r.push(text::caption(format!("#{tag}")));
+                let close_btn = button::text("✕")
+                    .class(cosmic::theme::Button::Text)
+                    .on_press(Message::CloseNoteTab(tab_path.clone()));
+
+                let tab_item = Row::new()
+                    .spacing(spacing.space_xs)
+                    .align_y(cosmic::iced::Alignment::Center)
+                    .push(
+                        button::text(tab_title)
+                            .class(cosmic::theme::Button::Text)
+                            .on_press(Message::SelectNote(tab_path.clone()))
+                    )
+                    .push(close_btn);
+
+                let mut tab_container = container(tab_item).padding([spacing.space_xxs, spacing.space_s]);
+                if is_active {
+                    tab_container = tab_container.class(cosmic::theme::Container::Card);
                 }
-                Some(r)
-            } else {
-                None
-            };
+                tab_row = tab_row.push(tab_container);
+            }
 
+            // B. Breadcrumb & Telemetry Navigation Bar
+            let nav_arrows = Row::new()
+                .spacing(spacing.space_xxs)
+                .push(button::icon(widget::icon::from_name("go-previous-symbolic").size(14)).class(cosmic::theme::Button::Text))
+                .push(button::icon(widget::icon::from_name("go-next-symbolic").size(14)).class(cosmic::theme::Button::Text));
+
+            let breadcrumb_text = text::caption(format!("Vault > {}", note.path.display()));
+            let word_count_text = text::caption(format!("{} words", note.word_count()));
+
+            let breadcrumb_bar = Row::new()
+                .spacing(spacing.space_s)
+                .align_y(cosmic::iced::Alignment::Center)
+                .push(nav_arrows)
+                .push(breadcrumb_text.width(Length::Fill))
+                .push(word_count_text);
+
+            // C. Editor & Preview Surface (Completely borderless editor)
             let style = widget::markdown::Style::from_palette(cosmic::iced::theme::Palette::DARK);
             let md_settings = widget::markdown::Settings::with_style(style);
             let md_view = widget::markdown::view(&self.parsed_markdown, md_settings)
                 .map(|_| Message::LinkClicked);
 
-            let preview_view = container(
-                scrollable(
-                    Column::new()
-                        .spacing(spacing.space_m)
-                        .push(md_view)
-                )
-                .height(Length::Fill)
-                .width(Length::Fill)
+            let preview_view = scrollable(
+                Column::new()
+                    .spacing(spacing.space_m)
+                    .push(md_view)
             )
-            .width(Length::Fill)
             .height(Length::Fill)
-            .padding(spacing.space_m);
+            .width(Length::Fill);
 
-            let editor_widget = container(
-                te::text_editor(&self.editor_content)
-                    .placeholder("Type your markdown note here...")
-                    .on_action(Message::EditorAction)
-                    .height(Length::Fill)
-            )
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .padding(spacing.space_m);
+            let editor_widget = te::text_editor(&self.editor_content)
+                .placeholder("Type your markdown note here...")
+                .on_action(Message::EditorAction)
+                .style(|theme, _| {
+                    let cosmic = theme.cosmic();
+                    te::Style {
+                        background: cosmic::iced::Color::TRANSPARENT.into(),
+                        border: cosmic::iced::Border::default(),
+                        placeholder: cosmic.palette.neutral_7.into(),
+                        value: cosmic.palette.neutral_9.into(),
+                        selection: cosmic.accent.base.into(),
+                    }
+                })
+                .height(Length::Fill);
 
             let body_surface: Element<'_, Self::Message> = match self.view_mode {
                 ViewMode::Editor => editor_widget.into(),
@@ -333,64 +431,58 @@ impl cosmic::Application for AppModel {
                     Row::new()
                         .spacing(spacing.space_m)
                         .push(container(editor_widget).width(Length::FillPortion(1)))
+                        .push(widget::divider::vertical::default())
                         .push(container(preview_view).width(Length::FillPortion(1)))
                         .into()
                 }
             };
 
-            // Knowledge Graph Links (Backlinks & Outgoing)
+            // D. Bottom Links & Backlinks
             let backlinks = self.vault_index.backlinks(&note.path);
             let outgoing = self.vault_index.outgoing_links(&note.path);
             let has_links = !backlinks.is_empty() || !outgoing.is_empty();
 
-            let mut link_panel = Column::new().spacing(spacing.space_xs);
+            let mut link_panel = Row::new().spacing(spacing.space_xs).align_y(cosmic::iced::Alignment::Center);
 
             if !backlinks.is_empty() {
-                let mut bl_col = Column::new().spacing(spacing.space_xxs);
-                bl_col = bl_col.push(text::caption(format!("BACKLINKS ({})", backlinks.len())));
-                let mut bl_row = Row::new().spacing(spacing.space_xs);
+                link_panel = link_panel.push(text::caption("Backlinks:"));
                 for bl in backlinks {
                     let bl_btn = button::text(format!("← {}", bl.source_title))
                         .class(cosmic::theme::Button::Text)
                         .on_press(Message::SelectNote(bl.source_path));
-                    bl_row = bl_row.push(bl_btn);
+                    link_panel = link_panel.push(bl_btn);
                 }
-                bl_col = bl_col.push(bl_row);
-                link_panel = link_panel.push(bl_col);
             }
 
             if !outgoing.is_empty() {
-                let mut out_col = Column::new().spacing(spacing.space_xxs);
-                out_col = out_col.push(text::caption(format!("LINKS ({})", outgoing.len())));
-                let mut out_row = Row::new().spacing(spacing.space_xs);
+                link_panel = link_panel.push(text::caption("Links:"));
                 for link in outgoing {
                     if let Some(target_path) = link.resolved_path {
                         let link_btn = button::text(format!("→ {}", link.target))
                             .class(cosmic::theme::Button::Text)
                             .on_press(Message::SelectNote(target_path));
-                        out_row = out_row.push(link_btn);
+                        link_panel = link_panel.push(link_btn);
                     } else {
                         let ghost = text::caption(format!("⤑ {} (uncreated)", link.target));
-                        out_row = out_row.push(ghost);
+                        link_panel = link_panel.push(ghost);
                     }
                 }
-                out_col = out_col.push(out_row);
-                link_panel = link_panel.push(out_col);
             }
 
-            let mut note_col = Column::new().spacing(spacing.space_s).push(title_header);
-            if let Some(t_row) = tags_row {
-                note_col = note_col.push(t_row);
-            }
-            note_col = note_col.push(body_surface);
+            let mut workspace_col = Column::new()
+                .spacing(spacing.space_s)
+                .push(tab_row)
+                .push(breadcrumb_bar)
+                .push(widget::divider::horizontal::default())
+                .push(body_surface);
+
             if has_links {
-                note_col = note_col
+                workspace_col = workspace_col
                     .push(widget::divider::horizontal::default())
                     .push(link_panel);
             }
 
-
-            container(note_col)
+            container(workspace_col)
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .padding(spacing.space_m)
@@ -400,8 +492,10 @@ impl cosmic::Application for AppModel {
                 Column::new()
                     .spacing(spacing.space_m)
                     .push(text::title3("No note selected"))
+                    .push(text::caption("Select a note from the sidebar or create a new one."))
                     .push(
-                        button::text("Create Note")
+                        button::text("New Note")
+                            .class(cosmic::theme::Button::Suggested)
                             .on_press(Message::CreateNewNote)
                     )
             )
@@ -417,6 +511,7 @@ impl cosmic::Application for AppModel {
             .push(widget::divider::vertical::default())
             .push(center_content)
             .into()
-
     }
 }
+
+
