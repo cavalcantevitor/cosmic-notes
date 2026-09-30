@@ -140,8 +140,6 @@ impl cosmic::Application for AppModel {
     }
 
     fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
-        let app_icon = widget::icon::from_name("accessories-text-editor-symbolic").size(18);
-
         let menu_btn = |label: &'static str, msg: Message, is_active: bool| {
             let b = button::text(label)
                 .class(if is_active {
@@ -154,7 +152,6 @@ impl cosmic::Application for AppModel {
         };
 
         vec![
-            app_icon.into(),
             menu_btn("New Note", Message::CreateNewNote, false),
             menu_btn("Edit", Message::SetViewMode(ViewMode::Editor), self.view_mode == ViewMode::Editor),
             menu_btn("Split", Message::SetViewMode(ViewMode::Split), self.view_mode == ViewMode::Split),
@@ -274,24 +271,16 @@ impl cosmic::Application for AppModel {
         let spacing = cosmic::theme::spacing();
 
         // 1. Left sidebar pane: COSMIC Files styling
-        let sidebar_header = Row::new()
-            .spacing(spacing.space_xs)
-            .align_y(cosmic::iced::Alignment::Center)
-            .push(widget::icon::from_name("folder-symbolic").size(16))
-            .push(text::body("Markdown Notes").width(Length::Fill));
-
-        let mut sidebar_col = Column::new()
-            .spacing(spacing.space_xs)
-            .push(sidebar_header);
+        let mut sidebar_col = Column::new().spacing(spacing.space_xs);
 
         if self.search_active {
             let search_bar = widget::text_input("Search notes...", &self.search_query)
                 .on_input(Message::SearchInputChanged)
                 .width(Length::Fill);
-            sidebar_col = sidebar_col.push(search_bar);
+            sidebar_col = sidebar_col
+                .push(search_bar)
+                .push(widget::divider::horizontal::default());
         }
-
-        sidebar_col = sidebar_col.push(widget::divider::horizontal::default());
 
         let render_note_item = |note: &Note, is_selected: bool| -> Element<'static, Message> {
             let title = if note.title.is_empty() {
@@ -349,53 +338,7 @@ impl cosmic::Application for AppModel {
 
         // 2. Main Workspace Area
         let center_content: Element<'_, Self::Message> = if let Some(ref note) = self.active_note {
-            // A. Tab Bar
-            let mut tab_row = Row::new().spacing(spacing.space_xs);
-            for tab_path in &self.open_tabs {
-                let is_active = self.selected_note_path.as_ref() == Some(tab_path);
-                let tab_title = tab_path
-                    .file_name()
-                    .map(|f| f.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "Note".to_string());
-
-                let close_btn = button::text("✕")
-                    .class(cosmic::theme::Button::Text)
-                    .on_press(Message::CloseNoteTab(tab_path.clone()));
-
-                let tab_item = Row::new()
-                    .spacing(spacing.space_xs)
-                    .align_y(cosmic::iced::Alignment::Center)
-                    .push(
-                        button::text(tab_title)
-                            .class(cosmic::theme::Button::Text)
-                            .on_press(Message::SelectNote(tab_path.clone()))
-                    )
-                    .push(close_btn);
-
-                let mut tab_container = container(tab_item).padding([spacing.space_xxs, spacing.space_s]);
-                if is_active {
-                    tab_container = tab_container.class(cosmic::theme::Container::Card);
-                }
-                tab_row = tab_row.push(tab_container);
-            }
-
-            // B. Breadcrumb & Telemetry Navigation Bar
-            let nav_arrows = Row::new()
-                .spacing(spacing.space_xxs)
-                .push(button::icon(widget::icon::from_name("go-previous-symbolic").size(14)).class(cosmic::theme::Button::Text))
-                .push(button::icon(widget::icon::from_name("go-next-symbolic").size(14)).class(cosmic::theme::Button::Text));
-
-            let breadcrumb_text = text::caption(format!("Vault > {}", note.path.display()));
-            let word_count_text = text::caption(format!("{} words", note.word_count()));
-
-            let breadcrumb_bar = Row::new()
-                .spacing(spacing.space_s)
-                .align_y(cosmic::iced::Alignment::Center)
-                .push(nav_arrows)
-                .push(breadcrumb_text.width(Length::Fill))
-                .push(word_count_text);
-
-            // C. Editor & Preview Surface (Completely borderless editor)
+            // Editor & Preview Surface (Completely borderless editor)
             let style = widget::markdown::Style::from_palette(cosmic::iced::theme::Palette::DARK);
             let md_settings = widget::markdown::Settings::with_style(style);
             let md_view = widget::markdown::view(&self.parsed_markdown, md_settings)
@@ -437,7 +380,7 @@ impl cosmic::Application for AppModel {
                 }
             };
 
-            // D. Bottom Links & Backlinks
+            // Bottom Links & Backlinks
             let backlinks = self.vault_index.backlinks(&note.path);
             let outgoing = self.vault_index.outgoing_links(&note.path);
             let has_links = !backlinks.is_empty() || !outgoing.is_empty();
@@ -471,9 +414,6 @@ impl cosmic::Application for AppModel {
 
             let mut workspace_col = Column::new()
                 .spacing(spacing.space_s)
-                .push(tab_row)
-                .push(breadcrumb_bar)
-                .push(widget::divider::horizontal::default())
                 .push(body_surface);
 
             if has_links {
