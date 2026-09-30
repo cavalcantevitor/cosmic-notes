@@ -230,16 +230,16 @@ Click **New Note** above or start editing right here!
                     .spacing(spacing.space_xs)
                     .padding([spacing.space_m, spacing.space_s])
                     .align_x(cosmic::iced::Alignment::Center)
-                    .push(widget::icon::from_name("edit-find-symbolic").size(24))
-                    .push(text::body("Type to find notes across your vault"))
-                    .push(text::caption("Navigate with ↑↓ • Select with Enter • Cancel with Esc"));
+                    .push(widget::icon::from_name("media-playlist-shuffle-symbolic").size(24))
+                    .push(text::body("Quick Switcher"))
+                    .push(text::caption("Type title or #tag • Navigate with ↑↓ • Select with Enter • Esc to close"));
                 results_col = results_col.push(empty_box);
             } else {
                 let not_found_box = Column::new()
                     .spacing(spacing.space_s)
                     .padding([spacing.space_m, spacing.space_s])
                     .align_x(cosmic::iced::Alignment::Center)
-                    .push(widget::icon::from_name("system-search-symbolic").size(24))
+                    .push(widget::icon::from_name("media-playlist-shuffle-symbolic").size(24))
                     .push(text::body(format!("No notes matching \"{}\"", self.quick_switcher_query)))
                     .push(
                         button::text(format!("Create note \"{}.md\"", self.quick_switcher_query.trim()))
@@ -273,16 +273,12 @@ Click **New Note** above or start editing right here!
                     row = row.push(text::caption(tags_preview));
                 }
 
-                let mut btn = button::custom(row)
+                let btn = button::custom(row)
                     .width(Length::Fill)
                     .padding([spacing.space_xs, spacing.space_s])
+                    .selected(is_highlighted)
+                    .class(cosmic::theme::Button::ListItem([8.0, 8.0, 8.0, 8.0]))
                     .on_press(Message::QuickSwitcherSelect(path));
-
-                if is_highlighted {
-                    btn = btn.class(cosmic::theme::Button::Suggested);
-                } else {
-                    btn = btn.class(cosmic::theme::Button::Text);
-                }
 
                 results_col = results_col.push(btn);
             }
@@ -294,7 +290,7 @@ Click **New Note** above or start editing right here!
                 Row::new()
                     .spacing(spacing.space_s)
                     .align_y(cosmic::iced::Alignment::Center)
-                    .push(widget::icon::from_name("edit-find-symbolic").size(18))
+                    .push(widget::icon::from_name("media-playlist-shuffle-symbolic").size(18))
                     .push(text::title3("Quick Switcher (Ctrl+P)").width(Length::Fill))
                     .push(
                         button::icon(widget::icon::from_name("window-close-symbolic").size(16))
@@ -333,7 +329,7 @@ Click **New Note** above or start editing right here!
                     .spacing(spacing.space_xs)
                     .padding([spacing.space_m, spacing.space_s])
                     .align_x(cosmic::iced::Alignment::Center)
-                    .push(widget::icon::from_name("folder-saved-search-symbolic").size(28))
+                    .push(widget::icon::from_name("system-search-symbolic").size(28))
                     .push(text::body("Deep Full-Text Vault Search"))
                     .push(text::caption("Search keywords, sentences, code blocks, and tags across every document."));
                 results_col = results_col.push(empty_box);
@@ -362,20 +358,18 @@ Click **New Note** above or start editing right here!
                 let mut card_col = Column::new().spacing(spacing.space_xxs).push(title_row);
 
                 if let Some(ref snippet) = r.snippet {
-                    let cleaned = strip_html_tags(snippet);
-                    card_col = card_col.push(text::caption(cleaned));
+                    let cleaned = clean_snippet_preview(snippet);
+                    if !cleaned.is_empty() {
+                        card_col = card_col.push(text::caption(cleaned));
+                    }
                 }
 
-                let mut btn = button::custom(card_col)
+                let btn = button::custom(card_col)
                     .width(Length::Fill)
                     .padding([spacing.space_xs, spacing.space_s])
+                    .selected(is_highlighted)
+                    .class(cosmic::theme::Button::ListItem([8.0, 8.0, 8.0, 8.0]))
                     .on_press(Message::SelectNote(path));
-
-                if is_highlighted {
-                    btn = btn.class(cosmic::theme::Button::Suggested);
-                } else {
-                    btn = btn.class(cosmic::theme::Button::Text);
-                }
 
                 results_col = results_col.push(btn);
             }
@@ -387,7 +381,7 @@ Click **New Note** above or start editing right here!
                 Row::new()
                     .spacing(spacing.space_s)
                     .align_y(cosmic::iced::Alignment::Center)
-                    .push(widget::icon::from_name("folder-saved-search-symbolic").size(18))
+                    .push(widget::icon::from_name("system-search-symbolic").size(18))
                     .push(text::title3("Full-Text Search (Ctrl+Shift+F)").width(Length::Fill))
                     .push(
                         button::icon(widget::icon::from_name("window-close-symbolic").size(16))
@@ -425,6 +419,23 @@ fn strip_html_tags(s: &str) -> String {
         }
     }
     out
+}
+
+fn clean_snippet_preview(snippet: &str) -> String {
+    let stripped = strip_html_tags(snippet);
+    let lines: Vec<&str> = stripped
+        .lines()
+        .map(|l| l.trim().trim_start_matches('#').trim())
+        .filter(|l| !l.is_empty())
+        .collect();
+    let combined = lines.join(" • ");
+    if combined.chars().count() > 130 {
+        let mut truncated: String = combined.chars().take(127).collect();
+        truncated.push_str("...");
+        truncated
+    } else {
+        combined
+    }
 }
 
 impl cosmic::Application for AppModel {
@@ -483,34 +494,34 @@ impl cosmic::Application for AppModel {
         let mut items: Vec<Element<'_, Self::Message>> = Vec::new();
 
         if self.search_active {
-            let search_input = widget::search_input("Search notes...", &self.search_query)
+            let search_input = widget::search_input("Filter notes...", &self.search_query)
                 .on_input(Message::SearchInputChanged)
-                .width(Length::Fixed(240.0));
+                .width(Length::Fixed(220.0));
             items.push(search_input.into());
+
+            let close_btn = button::icon(widget::icon::from_name("window-close-symbolic").size(16))
+                .class(cosmic::theme::Button::Text)
+                .on_press(Message::ToggleSearch);
+            let close_tip = widget::tooltip(
+                close_btn,
+                "Close Filter (Esc)",
+                widget::tooltip::Position::Bottom,
+            );
+            items.push(close_tip.into());
+        } else {
+            let filter_btn = button::icon(widget::icon::from_name("view-filter-symbolic").size(18))
+                .class(cosmic::theme::Button::Text)
+                .on_press(Message::ToggleSearch);
+            let filter_tip = widget::tooltip(
+                filter_btn,
+                "Filter Notes List (Ctrl+F)",
+                widget::tooltip::Position::Bottom,
+            );
+            items.push(filter_tip.into());
         }
 
-        let search_icon_name = if self.search_active {
-            "edit-clear-symbolic"
-        } else {
-            "system-search-symbolic"
-        };
-
-        let search_btn = button::icon(widget::icon::from_name(search_icon_name).size(18))
-            .class(if self.search_active {
-                cosmic::theme::Button::Suggested
-            } else {
-                cosmic::theme::Button::Text
-            })
-            .on_press(Message::ToggleSearch);
-        let search_tip = widget::tooltip(
-            search_btn,
-            "Filter Notes List (Ctrl+F)",
-            widget::tooltip::Position::Bottom,
-        );
-        items.push(search_tip.into());
-
-        // Quick Switcher Button
-        let qs_btn = button::icon(widget::icon::from_name("edit-find-symbolic").size(18))
+        // Quick Switcher Button (Crossing arrows)
+        let qs_btn = button::icon(widget::icon::from_name("media-playlist-shuffle-symbolic").size(18))
             .class(if self.show_quick_switcher {
                 cosmic::theme::Button::Suggested
             } else {
@@ -524,8 +535,8 @@ impl cosmic::Application for AppModel {
         );
         items.push(qs_tip.into());
 
-        // Deep Full-Text Search Button
-        let ft_btn = button::icon(widget::icon::from_name("folder-saved-search-symbolic").size(18))
+        // Deep Full-Text Search Button (Magnifying glass)
+        let ft_btn = button::icon(widget::icon::from_name("system-search-symbolic").size(18))
             .class(if self.show_fulltext_search {
                 cosmic::theme::Button::Suggested
             } else {
@@ -839,26 +850,21 @@ impl cosmic::Application for AppModel {
 
         let mut sidebar_col = Column::new().spacing(spacing.space_s);
 
-        // All Notes item (clean, no artificial "Library" header)
-        let all_notes_icon = widget::icon::from_name("folder-symbolic").size(16);
-        let all_notes_row = Row::new()
+        // Vault header with note counter (clean, no blue squircle)
+        let vault_icon = widget::icon::from_name("drive-harddisk-symbolic").size(16);
+        let vault_row = Row::new()
             .spacing(spacing.space_xs)
             .align_y(cosmic::iced::Alignment::Center)
-            .push(all_notes_icon)
-            .push(text::body("All Notes").width(Length::Fill))
+            .push(vault_icon)
+            .push(text::body("Vault").width(Length::Fill))
             .push(text::caption(self.notes.len().to_string()));
 
-        let mut all_notes_btn = button::custom(all_notes_row)
+        let vault_btn = button::custom(vault_row)
             .width(Length::Fill)
             .padding([spacing.space_xs, spacing.space_s])
+            .class(cosmic::theme::Button::Text)
             .on_press(Message::FilterByTag(None));
-
-        if self.selected_tag.is_none() && self.search_query.trim().is_empty() {
-            all_notes_btn = all_notes_btn.class(cosmic::theme::Button::Suggested);
-        } else {
-            all_notes_btn = all_notes_btn.class(cosmic::theme::Button::Text);
-        }
-        sidebar_col = sidebar_col.push(all_notes_btn);
+        sidebar_col = sidebar_col.push(vault_btn);
 
         // Tags Section (if any exist)
         if !all_tags.is_empty() {
@@ -872,20 +878,16 @@ impl cosmic::Application for AppModel {
                     .push(widget::icon::from_name("tag-symbolic").size(14))
                     .push(text::body(format!("#{tag}")).width(Length::Fill));
 
-                let mut tag_btn = button::custom(tag_row)
+                let tag_btn = button::custom(tag_row)
                     .width(Length::Fill)
                     .padding([spacing.space_xs, spacing.space_s])
+                    .selected(is_tag_selected)
+                    .class(cosmic::theme::Button::ListItem([8.0, 8.0, 8.0, 8.0]))
                     .on_press(Message::FilterByTag(if is_tag_selected {
                         None
                     } else {
                         Some(tag.clone())
                     }));
-
-                if is_tag_selected {
-                    tag_btn = tag_btn.class(cosmic::theme::Button::Suggested);
-                } else {
-                    tag_btn = tag_btn.class(cosmic::theme::Button::Text);
-                }
                 tags_group = tags_group.push(tag_btn);
             }
 
@@ -922,16 +924,12 @@ impl cosmic::Application for AppModel {
                 .push(text::body(title).width(Length::Fill))
                 .push(text::caption(note.formatted_date()));
 
-            let mut item_btn = button::custom(row_content)
+            let item_btn = button::custom(row_content)
                 .width(Length::Fill)
                 .padding([spacing.space_xs, spacing.space_s])
+                .selected(is_selected)
+                .class(cosmic::theme::Button::ListItem([8.0, 8.0, 8.0, 8.0]))
                 .on_press(Message::SelectNote(note.path.clone()));
-
-            if is_selected {
-                item_btn = item_btn.class(cosmic::theme::Button::Suggested);
-            } else {
-                item_btn = item_btn.class(cosmic::theme::Button::Text);
-            }
 
             item_btn.into()
         };
