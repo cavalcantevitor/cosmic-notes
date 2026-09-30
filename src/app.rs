@@ -6,7 +6,8 @@ use cosmic::widget::{self, button, container, scrollable, text, Column, Row};
 use cosmic::Element;
 use std::path::{Path, PathBuf};
 
-use crate::core::{Note, Vault};
+use crate::core::{Note, Vault, VaultEvent};
+use crate::search::VaultIndex;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ViewMode {
@@ -22,17 +23,21 @@ pub enum Message {
     SetViewMode(ViewMode),
     EditorAction(EditorAction),
     LinkClicked,
+    SearchInputChanged(String),
+    VaultFileEvent(VaultEvent),
 }
 
 pub struct AppModel {
     core: Core,
     vault: Vault,
+    vault_index: VaultIndex,
     notes: Vec<Note>,
     selected_note_path: Option<PathBuf>,
     active_note: Option<Note>,
     editor_content: EditorContent,
     parsed_markdown: Vec<widget::markdown::Item>,
     view_mode: ViewMode,
+    search_query: String,
 }
 
 impl AppModel {
@@ -65,6 +70,7 @@ COSMIC Notes is a native, high-performance, local-first note-taking app built sp
 - **Local-First & Obsidian Compatible**: Your notes are plain CommonMark `.md` files on your disk.
 - **Ultra-Fast**: Sub-millisecond dual-tier search and reactive filesystem monitoring.
 - **Write-Echo Cancellation**: Avoids file watcher loops when saving notes.
+- **Knowledge Graph**: Bidirectional `[[wikilinks]]` and backlink discovery.
 
 Click **New Note** above or start editing right here!
 "#;
@@ -72,6 +78,11 @@ Click **New Note** above or start editing right here!
                 scanned.push(welcome_note);
             }
         }
+
+        let index_dir = vault.root_path().join(".cosmic-notes").join("index");
+        let vault_index = VaultIndex::open_or_create(&index_dir, &scanned).unwrap_or_else(|_| {
+            VaultIndex::create_in_ram(&scanned).expect("Failed to initialize in-ram index")
+        });
 
         let selected = scanned.first().map(|n| n.path.clone());
         let active = scanned.first().cloned();
@@ -88,17 +99,20 @@ Click **New Note** above or start editing right here!
         let app = Self {
             core,
             vault,
+            vault_index,
             notes: scanned,
             selected_note_path: selected,
             active_note: active,
             editor_content,
             parsed_markdown,
             view_mode: ViewMode::Split,
+            search_query: String::new(),
         };
 
         (app, Task::none())
     }
 }
+
 
 impl cosmic::Application for AppModel {
     type Executor = cosmic::executor::Default;
@@ -158,6 +172,7 @@ impl cosmic::Application for AppModel {
                 let filename = format!("Untitled_{note_count}.md");
                 let initial_content = format!("# Untitled {}\n\nStart typing your note here...", note_count);
                 if let Ok(note) = self.vault.write_note(Path::new(&filename), &initial_content) {
+                    let _ = self.vault_index.update_note(&note);
                     self.editor_content = EditorContent::with_text(&note.raw_content);
                     self.parsed_markdown = widget::markdown::parse(&note.body).collect();
                     self.selected_note_path = Some(note.path.clone());
@@ -177,6 +192,7 @@ impl cosmic::Application for AppModel {
                     // Auto-save to vault with write-echo cancellation
                     if let Some(ref path) = self.selected_note_path {
                         if let Ok(updated_note) = self.vault.write_note(path, &current_text) {
+                            let _ = self.vault_index.update_note(&updated_note);
                             if let Some(n) = self.notes.iter_mut().find(|n| n.path == *path) {
                                 *n = updated_note.clone();
                             }
@@ -189,6 +205,15 @@ impl cosmic::Application for AppModel {
                 self.view_mode = mode;
             }
             Message::LinkClicked => {}
+            Message::SearchInputChanged(query) => {
+                self.search_query = query;
+            }
+            Message::VaultFileEvent(event) => {
+                let _ = self.vault_index.handle_vault_event(&event, &self.vault);
+                if let Ok(scanned) = self.vault.scan_notes() {
+                    self.notes = scanned;
+                }
+            }
         }
         Task::none()
     }
@@ -196,33 +221,67 @@ impl cosmic::Application for AppModel {
     fn view(&self) -> Element<'_, Self::Message> {
         let spacing = cosmic::theme::spacing();
 
-        // Left sidebar: Note list
+        // Left sidebar: Search bar + Note list
+        let search_bar = widget::text_input("Search notes (Ctrl+P)...", &self.search_query)
+            .on_input(Message::SearchInputChanged)
+            .width(Length::Fill);
+
         let mut note_items = Column::new().spacing(spacing.space_xxs);
-        for note in &self.notes {
-            let is_selected = self.selected_note_path.as_ref() == Some(&note.path);
-            let title = if note.title.is_empty() {
-                "Untitled"
-            } else {
-                &note.title
-            };
 
-            let mut note_btn = button::text(title.to_string())
-                .width(Length::Fill)
-                .on_press(Message::SelectNote(note.path.clone()));
+        if self.search_query.trim().is_empty() {
+            for note in &self.notes {
+                let is_selected = self.selected_note_path.as_ref() == Some(&note.path);
+                let title = if note.title.is_empty() {
+                    "Untitled"
+                } else {
+                    &note.title
+                };
 
-            if is_selected {
-                note_btn = note_btn.class(cosmic::theme::Button::Suggested);
-            } else {
-                note_btn = note_btn.class(cosmic::theme::Button::Text);
+                let mut note_btn = button::text(title.to_string())
+                    .width(Length::Fill)
+                    .on_press(Message::SelectNote(note.path.clone()));
+
+                if is_selected {
+                    note_btn = note_btn.class(cosmic::theme::Button::Suggested);
+                } else {
+                    note_btn = note_btn.class(cosmic::theme::Button::Text);
+                }
+
+                note_items = note_items.push(note_btn);
             }
+        } else {
+            let matches_index = self.vault_index.quick_search(&self.search_query, 50);
+            for m in matches_index {
 
-            note_items = note_items.push(note_btn);
+                let is_selected = self.selected_note_path.as_ref() == Some(&m.item.path);
+                let title = if m.item.title.is_empty() {
+                    "Untitled"
+                } else {
+                    &m.item.title
+                };
+
+                let mut note_btn = button::text(title.to_string())
+                    .width(Length::Fill)
+                    .on_press(Message::SelectNote(m.item.path.clone()));
+
+                if is_selected {
+                    note_btn = note_btn.class(cosmic::theme::Button::Suggested);
+                } else {
+                    note_btn = note_btn.class(cosmic::theme::Button::Text);
+                }
+
+                note_items = note_items.push(note_btn);
+            }
         }
 
         let sidebar = container(
-            scrollable(note_items).width(Length::Fill).height(Length::Fill)
+            Column::new()
+                .spacing(spacing.space_s)
+                .push(search_bar)
+                .push(widget::divider::horizontal::default())
+                .push(scrollable(note_items).width(Length::Fill).height(Length::Fill))
         )
-        .width(Length::Fixed(240.0))
+        .width(Length::Fixed(260.0))
         .padding(spacing.space_s);
 
         // Center content area: Active note view
@@ -279,11 +338,57 @@ impl cosmic::Application for AppModel {
                 }
             };
 
+            // Knowledge Graph Links (Backlinks & Outgoing)
+            let backlinks = self.vault_index.backlinks(&note.path);
+            let outgoing = self.vault_index.outgoing_links(&note.path);
+            let has_links = !backlinks.is_empty() || !outgoing.is_empty();
+
+            let mut link_panel = Column::new().spacing(spacing.space_xs);
+
+            if !backlinks.is_empty() {
+                let mut bl_col = Column::new().spacing(spacing.space_xxs);
+                bl_col = bl_col.push(text::caption(format!("BACKLINKS ({})", backlinks.len())));
+                let mut bl_row = Row::new().spacing(spacing.space_xs);
+                for bl in backlinks {
+                    let bl_btn = button::text(format!("← {}", bl.source_title))
+                        .class(cosmic::theme::Button::Text)
+                        .on_press(Message::SelectNote(bl.source_path));
+                    bl_row = bl_row.push(bl_btn);
+                }
+                bl_col = bl_col.push(bl_row);
+                link_panel = link_panel.push(bl_col);
+            }
+
+            if !outgoing.is_empty() {
+                let mut out_col = Column::new().spacing(spacing.space_xxs);
+                out_col = out_col.push(text::caption(format!("LINKS ({})", outgoing.len())));
+                let mut out_row = Row::new().spacing(spacing.space_xs);
+                for link in outgoing {
+                    if let Some(target_path) = link.resolved_path {
+                        let link_btn = button::text(format!("→ {}", link.target))
+                            .class(cosmic::theme::Button::Text)
+                            .on_press(Message::SelectNote(target_path));
+                        out_row = out_row.push(link_btn);
+                    } else {
+                        let ghost = text::caption(format!("⤑ {} (uncreated)", link.target));
+                        out_row = out_row.push(ghost);
+                    }
+                }
+                out_col = out_col.push(out_row);
+                link_panel = link_panel.push(out_col);
+            }
+
             let mut note_col = Column::new().spacing(spacing.space_s).push(title_header);
             if let Some(t_row) = tags_row {
                 note_col = note_col.push(t_row);
             }
             note_col = note_col.push(body_surface);
+            if has_links {
+                note_col = note_col
+                    .push(widget::divider::horizontal::default())
+                    .push(link_panel);
+            }
+
 
             container(note_col)
                 .width(Length::Fill)
@@ -312,5 +417,6 @@ impl cosmic::Application for AppModel {
             .push(widget::divider::vertical::default())
             .push(center_content)
             .into()
+
     }
 }

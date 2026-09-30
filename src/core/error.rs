@@ -32,6 +32,13 @@ pub enum VaultError {
 
     #[error("Watcher error: {0}")]
     WatcherError(String),
+
+    #[error("Search index error: {0}")]
+    SearchError(String),
+
+    #[error("Query parse error: {0}")]
+    QueryError(String),
 }
+
 
 pub type Result<T> = std::result::Result<T, VaultError>;

@@ -123,15 +123,22 @@ Every commit in this repository MUST strictly follow the [Conventional Commits v
    - [`tests/vault_integration.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/tests/vault_integration.rs): Full integration tests passing (write-echo cancellation and external file detection).
 3. **Interactive Desktop Application Shell (`src/app.rs` & `src/main.rs`)**:
    - `cosmic::Application` implementation runnable via `cargo run`.
-   - Sidebar with note list navigation and "New Note" creation.
-   - Multi-line live text editor (`cosmic::widget::text_editor`) with automatic persistence to disk.
+   - Sidebar with search input for instant fuzzy note filtering, note list navigation, and "New Note" creation.
+   - Multi-line live text editor (`cosmic::widget::text_editor`) with automatic persistence to disk and write-echo cancellation.
    - View mode switching (**Edit** | **Split** | **Preview**) with live AST Markdown rendering.
+   - Live bidirectional backlinks and outgoing links panel below notes.
+4. **Dual-Tier Search & Knowledge Graph Engine (`src/search/` & `src/graph/`)**:
+   - [`src/search/fuzzy.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/src/search/fuzzy.rs): Microsecond fuzzy matcher (`nucleo`) indexing title, path, and tags with pure `&self` querying.
+   - [`src/search/fulltext.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/src/search/fulltext.rs): Sub-millisecond Tantivy BM25 inverted index with field boosting and highlighted snippet generation.
+   - [`src/graph/mod.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/src/graph/mod.rs): Bidirectional knowledge graph (`petgraph`) resolving wikilinks, computing incoming backlinks, outgoing links, unresolved links, and orphan notes.
+   - [`src/search/mod.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/src/search/mod.rs): Unified `VaultIndex` coordinator reactive to `VaultEvent` disk mutations.
+   - Full test suite passing across all units and integration tests (16 unit tests + 1 integration test, 0 failures, 0 warnings).
 
 ### Next Session Objective:
-* **Start Phase 2: Dual-Tier Search & Knowledge Graph Engine**:
-  - Implement Tier 1 fuzzy search in `src/search/fuzzy.rs` using `nucleo` for instant `Ctrl+P` file/tag switching (<0.1ms).
-  - Implement Tier 2 full-text BM25 indexing in `src/search/fulltext.rs` using `tantivy` inside `.cosmic-notes/index/` (<0.5ms).
-  - Implement graph topology in `src/graph/` using `petgraph` to map `[[wikilinks]]` and calculate backlinks.
-  - Wire search index updating to `VaultEvent` changes from `VaultWatcher`.
+* **Start Phase 3: Multi-Column COSMIC Shell & Context Drawer**:
+  - Implement collapsible left drawer with directory folder tree navigation and tag filter panel.
+  - Implement right-hand `context_drawer` displaying note document statistics (word count, reading time), backlink explorer, and metadata inspector.
+  - Implement global keyboard shortcuts (`Ctrl+P` Quick Switcher modal, `Ctrl+Shift+F` Full-Text Search overlay).
+
 
 
