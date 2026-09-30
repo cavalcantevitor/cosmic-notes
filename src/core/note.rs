@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet, hash_map::DefaultHasher};
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
-use crate::core::error::{Result, VaultError};
+use crate::core::error::Result;
 
 /// Parsed YAML Frontmatter at the top of a Markdown note.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -168,14 +168,19 @@ impl Note {
                 String::new()
             };
 
-            let fm: Frontmatter = serde_yaml::from_str(yaml_str).map_err(|e| {
-                VaultError::FrontmatterParse {
-                    path: path.to_path_buf(),
-                    message: e.to_string(),
+            let fm = match serde_yaml::from_str::<Frontmatter>(yaml_str) {
+                Ok(parsed) => Some(parsed),
+                Err(e) => {
+                    tracing::warn!(
+                        "Malformed frontmatter in {:?}: {}. Falling back to body content.",
+                        path,
+                        e
+                    );
+                    None
                 }
-            })?;
+            };
 
-            Ok((Some(fm), body))
+            Ok((fm, body))
         } else {
             Ok((None, content.to_string()))
         }

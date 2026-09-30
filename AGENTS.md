@@ -34,6 +34,15 @@ This file serves as the mandatory operational guide for AI agents working on the
      * **Edit Mode**: Focused typing via `cosmic-text` with syntax highlighting and line numbers.
      * **Split Mode**: Side-by-side Editor and live Markdown preview with synchronized scrolling.
      * **Preview Mode**: Clean reading view.
+7. **Hurff Five-State UI Rule**:
+   * Every screen, search overlay, and navigation panel must explicitly support the **Hurff Five States**:
+     * **Ideal State**: Clear typographic hierarchy and structured lists.
+     * **Empty State**: Friendly zero-data visual with clear call-to-action (CTA) (e.g. "No notes found", "Create your first note").
+     * **Partial State**: Resilient layout when notes have missing tags or incomplete frontmatter.
+     * **Loading State**: Responsive non-blocking cues for async indexing or disk scans.
+     * **Error State**: Informative, non-blocking alerts that **never lose uncommitted user input**.
+8. **Regression Prevention & Verification Gate**:
+   * New iterations must not break existing working workflows. Every milestone or feature pull requires running the full smoke and boundary regression test suite (`cargo test --all-targets`) with zero compiler warnings and zero test failures before committing.
 
 ---
 
@@ -142,6 +151,14 @@ Every commit in this repository MUST strictly follow the [Conventional Commits v
   - Global `Ctrl+P` modal quick-switcher palette with `nucleo` fuzzy matching.
   - Global `Ctrl+Shift+F` full-text deep search overlay with Tantivy BM25 highlighted snippets.
   - Prioritized QoL improvements: system tooltips on header buttons, keyboard accelerators (`Ctrl+N`, `Ctrl+1/2/3`), and friendly zero-match empty search states.
+
+### Planned Future Milestones:
+* **Milestone 5 (M5: Ecosystem Extensibility — `v0.6.0-beta`)**:
+  - Trait definitions for `VaultSyncEngine` (`gix`/`git2`) and MCP-compatible `AgentVaultApi` (`cosmic::iced::stream::channel`).
+* **Milestone 6 (M6: Quality & Governance — `v0.7.0-beta`)**:
+  - Hurff 5-State UI audit across all views, automated smoke & boundary test suite, Antigravity deterministic hooks, and 4-phase Release Checkpoint Matrix.
+* **v1.0: GA Release (`v1.0.0`)**:
+  - Packaging (Flatpak/COSMIC Store), settings persistence via `cosmic-config`, first stable user release.
 
 
 

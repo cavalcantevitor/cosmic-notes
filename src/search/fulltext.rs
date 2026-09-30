@@ -226,9 +226,21 @@ impl FullTextEngine {
         // Boost title matches higher than body
         query_parser.set_field_boost(self.fields.title, 2.0);
 
-        let query = query_parser.parse_query(query_str).map_err(|e| {
-            VaultError::QueryError(format!("Query syntax error in '{}': {}", query_str, e))
-        })?;
+        let query = match query_parser.parse_query(query_str) {
+            Ok(q) => q,
+            Err(_) => {
+                // If direct parse failed (e.g. unclosed quotes, boolean operators without operands),
+                // attempt parsing with escaped special characters
+                let escaped = escape_query_string(query_str);
+                match query_parser.parse_query(&escaped) {
+                    Ok(q) => q,
+                    Err(_) => {
+                        // If still unparseable, return empty results gracefully instead of failing
+                        return Ok(Vec::new());
+                    }
+                }
+            }
+        };
 
         let top_docs = searcher
             .search(&query, &TopDocs::with_limit(limit))
@@ -268,6 +280,22 @@ impl FullTextEngine {
 
         Ok(results)
     }
+}
+
+/// Helper function to escape special Tantivy query syntax characters.
+fn escape_query_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() * 2);
+    for c in s.chars() {
+        if matches!(
+            c,
+            '+' | '-' | '&' | '|' | '!' | '(' | ')' | '{' | '}' | '[' | ']' | '^' | '"' | '~'
+                | '*' | '?' | ':' | '\\' | '/'
+        ) {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
 }
 
 #[cfg(test)]
