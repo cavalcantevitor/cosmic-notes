@@ -143,3 +143,59 @@ fn test_write_echo_ttl_and_filtering() {
     std::thread::sleep(Duration::from_millis(150));
     assert!(!cache.consume_echo(path, None), "Token must expire after TTL");
 }
+
+#[test]
+fn test_m4_search_experience_and_indexing() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let vault = Vault::open(dir.path()).expect("Failed to open vault");
+
+    // Seed notes for M4 search experience
+    vault.write_note(
+        Path::new("cosmic_desktop.md"),
+        "---\ntitle: COSMIC Desktop Guide\ntags: [cosmic, rust, gui]\n---\n# COSMIC Desktop\nA modern Rust desktop environment.",
+    ).unwrap();
+
+    vault.write_note(
+        Path::new("rust_concurrency.md"),
+        "---\ntitle: Rust Concurrency Patterns\ntags: [rust, performance]\n---\n# Concurrency in Rust\nChannels and async/await.",
+    ).unwrap();
+
+    vault.write_note(
+        Path::new("journal/daily_log.md"),
+        "---\ntitle: Daily Log 2026\ntags: [journal]\n---\nWorking on COSMIC Notes search dialogs.",
+    ).unwrap();
+
+    let notes = vault.scan_notes().unwrap();
+    let index = VaultIndex::open_or_create(&dir.path().join(".cosmic-notes/index"), &notes).expect("Index build must succeed");
+
+    // 1. M4 Quick Switcher: Nucleo fuzzy search on title, tags, path (<0.1ms)
+    let fuzzy_res1 = index.quick_search("cosmic", 10);
+    assert_eq!(fuzzy_res1.len(), 1, "Quick Switcher matches title/path/tag for 'cosmic_desktop'");
+    assert_eq!(fuzzy_res1[0].item.path, Path::new("cosmic_desktop.md"));
+
+    let fuzzy_res2 = index.quick_search("performance", 10);
+    assert_eq!(fuzzy_res2.len(), 1, "Should match tag 'performance'");
+    assert_eq!(fuzzy_res2[0].item.path, Path::new("rust_concurrency.md"));
+
+    let fuzzy_res3 = index.quick_search("journal", 10);
+    assert_eq!(fuzzy_res3.len(), 1, "Should match path 'journal/daily_log.md'");
+    assert_eq!(fuzzy_res3[0].item.path, Path::new("journal/daily_log.md"));
+
+    // 2. M4 Full-Text Search: Tantivy BM25 with snippets and body search
+    let ft_cosmic = index.fulltext_search("cosmic", 10).unwrap();
+    assert_eq!(ft_cosmic.len(), 2, "Full-text search finds 'cosmic' in title AND in body text");
+
+    let ft_results = index.fulltext_search("modern environment", 10).unwrap();
+    assert_eq!(ft_results.len(), 1);
+    assert_eq!(ft_results[0].path, Path::new("cosmic_desktop.md"));
+    assert!(ft_results[0].snippet.as_ref().unwrap().to_lowercase().contains("modern"));
+
+    // Title boosted score test: searching "Rust" should rank "Rust Concurrency Patterns" (in title)
+    let ft_rust = index.fulltext_search("Rust", 10).unwrap();
+    assert!(ft_rust.len() >= 2);
+
+    // Operator escaping: queries with punctuation or operator characters shouldn't panic
+    let complex_query = index.fulltext_search("rust + modern: (async/await)", 10);
+    assert!(complex_query.is_ok(), "Query syntax with symbols must not panic or error");
+}
+

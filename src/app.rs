@@ -35,6 +35,7 @@ pub fn calculate_content_hash(content: &str) -> u64 {
 pub enum Message {
     SelectNote(PathBuf),
     CreateNewNote,
+    CreateNoteWithTitle(String),
     SetViewMode(ViewMode),
     EditorAction(EditorAction),
     PaneResized(pane_grid::ResizeEvent),
@@ -46,6 +47,18 @@ pub enum Message {
     FilterByTag(Option<String>),
     CloseNoteTab(PathBuf),
     VaultFileEvent(VaultEvent),
+    // M4: Search Experience & Modals
+    OpenQuickSwitcher,
+    CloseQuickSwitcher,
+    QuickSwitcherInputChanged(String),
+    QuickSwitcherSelect(PathBuf),
+    OpenFullTextSearch,
+    CloseFullTextSearch,
+    FullTextSearchInputChanged(String),
+    CloseModals,
+    ModalNavigateDown,
+    ModalNavigateUp,
+    ModalSelectCurrent,
 }
 
 pub struct AppModel {
@@ -66,6 +79,15 @@ pub struct AppModel {
     show_sidebar: bool,
     show_context: bool,
     selected_tag: Option<String>,
+    // M4: Search Experience & Modals
+    show_quick_switcher: bool,
+    quick_switcher_query: String,
+    quick_switcher_results: Vec<crate::search::FuzzyMatch>,
+    quick_switcher_selected: usize,
+    show_fulltext_search: bool,
+    fulltext_query: String,
+    fulltext_results: Vec<crate::search::FullTextSearchResult>,
+    fulltext_selected: usize,
 }
 
 impl AppModel {
@@ -153,10 +175,256 @@ Click **New Note** above or start editing right here!
             show_sidebar: true,
             show_context: false,
             selected_tag: None,
+            show_quick_switcher: false,
+            quick_switcher_query: String::new(),
+            quick_switcher_results: Vec::new(),
+            quick_switcher_selected: 0,
+            show_fulltext_search: false,
+            fulltext_query: String::new(),
+            fulltext_results: Vec::new(),
+            fulltext_selected: 0,
         };
 
         (app, Task::none())
     }
+
+    pub fn select_note(&mut self, path: PathBuf) {
+        if !self.open_tabs.contains(&path) {
+            self.open_tabs.push(path.clone());
+        }
+        if let Ok(note) = self.vault.read_note(&path) {
+            self.editor_content = EditorContent::with_text(&note.raw_content);
+            self.content_hash = calculate_content_hash(&note.raw_content);
+            self.parsed_markdown = widget::markdown::parse(&note.body).collect();
+            self.active_note = Some(note);
+            self.selected_note_path = Some(path);
+        }
+    }
+
+    pub fn create_note_with_title(&mut self, title: String) {
+        let clean_title = title.trim();
+        if clean_title.is_empty() {
+            return;
+        }
+        let safe_filename = format!("{}.md", clean_title.replace('/', "_").replace('\\', "_"));
+        let initial_content = format!("# {}\n\nStart typing your note here...", clean_title);
+        if let Ok(note) = self.vault.write_note(Path::new(&safe_filename), &initial_content) {
+            let _ = self.vault_index.update_note(&note);
+            self.select_note(note.path.clone());
+            self.notes.push(note);
+        }
+    }
+
+    pub fn view_quick_switcher(&self) -> Element<'_, Message> {
+        let spacing = cosmic::theme::spacing();
+
+        let search_input = widget::search_input("Jump to note by title, path, or #tag... (Esc to close)", &self.quick_switcher_query)
+            .on_input(Message::QuickSwitcherInputChanged)
+            .width(Length::Fill);
+
+        let mut results_col = Column::new().spacing(spacing.space_xxs);
+
+        if self.quick_switcher_results.is_empty() {
+            if self.quick_switcher_query.trim().is_empty() {
+                let empty_box = Column::new()
+                    .spacing(spacing.space_xs)
+                    .padding([spacing.space_m, spacing.space_s])
+                    .align_x(cosmic::iced::Alignment::Center)
+                    .push(widget::icon::from_name("edit-find-symbolic").size(24))
+                    .push(text::body("Type to find notes across your vault"))
+                    .push(text::caption("Navigate with ↑↓ • Select with Enter • Cancel with Esc"));
+                results_col = results_col.push(empty_box);
+            } else {
+                let not_found_box = Column::new()
+                    .spacing(spacing.space_s)
+                    .padding([spacing.space_m, spacing.space_s])
+                    .align_x(cosmic::iced::Alignment::Center)
+                    .push(widget::icon::from_name("system-search-symbolic").size(24))
+                    .push(text::body(format!("No notes matching \"{}\"", self.quick_switcher_query)))
+                    .push(
+                        button::text(format!("Create note \"{}.md\"", self.quick_switcher_query.trim()))
+                            .class(cosmic::theme::Button::Suggested)
+                            .on_press(Message::CreateNoteWithTitle(self.quick_switcher_query.trim().to_string())),
+                    );
+                results_col = results_col.push(not_found_box);
+            }
+        } else {
+            for (idx, m) in self.quick_switcher_results.iter().enumerate() {
+                let is_highlighted = idx == self.quick_switcher_selected;
+                let path = m.item.path.clone();
+
+                let doc_icon = widget::icon::from_name("text-x-generic-symbolic").size(16);
+                let title_text = text::body(if m.item.title.is_empty() {
+                    "Untitled".to_string()
+                } else {
+                    m.item.title.clone()
+                });
+
+                let path_text = text::caption(m.item.path.to_string_lossy().to_string());
+
+                let mut row = Row::new()
+                    .spacing(spacing.space_xs)
+                    .align_y(cosmic::iced::Alignment::Center)
+                    .push(doc_icon)
+                    .push(Column::new().push(title_text).push(path_text).width(Length::Fill));
+
+                if !m.item.tags.is_empty() {
+                    let tags_preview = m.item.tags.iter().take(2).map(|t| format!("#{t}")).collect::<Vec<_>>().join(" ");
+                    row = row.push(text::caption(tags_preview));
+                }
+
+                let mut btn = button::custom(row)
+                    .width(Length::Fill)
+                    .padding([spacing.space_xs, spacing.space_s])
+                    .on_press(Message::QuickSwitcherSelect(path));
+
+                if is_highlighted {
+                    btn = btn.class(cosmic::theme::Button::Suggested);
+                } else {
+                    btn = btn.class(cosmic::theme::Button::Text);
+                }
+
+                results_col = results_col.push(btn);
+            }
+        }
+
+        let card_content = Column::new()
+            .spacing(spacing.space_m)
+            .push(
+                Row::new()
+                    .spacing(spacing.space_s)
+                    .align_y(cosmic::iced::Alignment::Center)
+                    .push(widget::icon::from_name("edit-find-symbolic").size(18))
+                    .push(text::title3("Quick Switcher (Ctrl+P)").width(Length::Fill))
+                    .push(
+                        button::icon(widget::icon::from_name("window-close-symbolic").size(16))
+                            .class(cosmic::theme::Button::Text)
+                            .on_press(Message::CloseModals),
+                    ),
+            )
+            .push(search_input)
+            .push(scrollable(results_col).height(Length::Fixed(320.0)));
+
+        let card = container(card_content)
+            .class(cosmic::theme::Container::Card)
+            .width(Length::Fixed(560.0))
+            .padding(spacing.space_m);
+
+        container(card)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+    }
+
+    pub fn view_fulltext_search(&self) -> Element<'_, Message> {
+        let spacing = cosmic::theme::spacing();
+
+        let search_input = widget::search_input("Search entire vault contents (BM25)...", &self.fulltext_query)
+            .on_input(Message::FullTextSearchInputChanged)
+            .width(Length::Fill);
+
+        let mut results_col = Column::new().spacing(spacing.space_xs);
+
+        if self.fulltext_results.is_empty() {
+            if self.fulltext_query.trim().is_empty() {
+                let empty_box = Column::new()
+                    .spacing(spacing.space_xs)
+                    .padding([spacing.space_m, spacing.space_s])
+                    .align_x(cosmic::iced::Alignment::Center)
+                    .push(widget::icon::from_name("folder-saved-search-symbolic").size(28))
+                    .push(text::body("Deep Full-Text Vault Search"))
+                    .push(text::caption("Search keywords, sentences, code blocks, and tags across every document."));
+                results_col = results_col.push(empty_box);
+            } else {
+                let not_found_box = Column::new()
+                    .spacing(spacing.space_s)
+                    .padding([spacing.space_m, spacing.space_s])
+                    .align_x(cosmic::iced::Alignment::Center)
+                    .push(widget::icon::from_name("system-search-symbolic").size(24))
+                    .push(text::body(format!("No notes contain \"{}\"", self.fulltext_query)))
+                    .push(text::caption("Try different keywords or broader search terms."));
+                results_col = results_col.push(not_found_box);
+            }
+        } else {
+            for (idx, r) in self.fulltext_results.iter().enumerate() {
+                let is_highlighted = idx == self.fulltext_selected;
+                let path = r.path.clone();
+
+                let title_row = Row::new()
+                    .spacing(spacing.space_xs)
+                    .align_y(cosmic::iced::Alignment::Center)
+                    .push(widget::icon::from_name("text-x-generic-symbolic").size(16))
+                    .push(text::body(&r.title).width(Length::Fill))
+                    .push(text::caption(r.path.to_string_lossy().to_string()));
+
+                let mut card_col = Column::new().spacing(spacing.space_xxs).push(title_row);
+
+                if let Some(ref snippet) = r.snippet {
+                    let cleaned = strip_html_tags(snippet);
+                    card_col = card_col.push(text::caption(cleaned));
+                }
+
+                let mut btn = button::custom(card_col)
+                    .width(Length::Fill)
+                    .padding([spacing.space_xs, spacing.space_s])
+                    .on_press(Message::SelectNote(path));
+
+                if is_highlighted {
+                    btn = btn.class(cosmic::theme::Button::Suggested);
+                } else {
+                    btn = btn.class(cosmic::theme::Button::Text);
+                }
+
+                results_col = results_col.push(btn);
+            }
+        }
+
+        let card_content = Column::new()
+            .spacing(spacing.space_m)
+            .push(
+                Row::new()
+                    .spacing(spacing.space_s)
+                    .align_y(cosmic::iced::Alignment::Center)
+                    .push(widget::icon::from_name("folder-saved-search-symbolic").size(18))
+                    .push(text::title3("Full-Text Search (Ctrl+Shift+F)").width(Length::Fill))
+                    .push(
+                        button::icon(widget::icon::from_name("window-close-symbolic").size(16))
+                            .class(cosmic::theme::Button::Text)
+                            .on_press(Message::CloseModals),
+                    ),
+            )
+            .push(search_input)
+            .push(scrollable(results_col).height(Length::Fixed(360.0)));
+
+        let card = container(card_content)
+            .class(cosmic::theme::Container::Card)
+            .width(Length::Fixed(620.0))
+            .padding(spacing.space_m);
+
+        container(card)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+    }
+}
+
+fn strip_html_tags(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut inside = false;
+    for c in s.chars() {
+        if c == '<' {
+            inside = true;
+        } else if c == '>' {
+            inside = false;
+        } else if !inside {
+            out.push(c);
+        }
+    }
+    out
 }
 
 impl cosmic::Application for AppModel {
@@ -185,8 +453,13 @@ impl cosmic::Application for AppModel {
                 cosmic::theme::Button::Suggested
             })
             .on_press(Message::ToggleSidebar);
+        let sidebar_tip = widget::tooltip(
+            sidebar_toggle,
+            "Toggle Explorer Sidebar (Ctrl+\\)",
+            widget::tooltip::Position::Bottom,
+        );
 
-        let menu_btn = |label: &'static str, msg: Message, is_active: bool| {
+        let menu_btn = |label: &'static str, tip: &'static str, msg: Message, is_active: bool| {
             let b = button::text(label)
                 .class(if is_active {
                     cosmic::theme::Button::Suggested
@@ -194,15 +467,15 @@ impl cosmic::Application for AppModel {
                     cosmic::theme::Button::Text
                 })
                 .on_press(msg);
-            b.into()
+            widget::tooltip(b, tip, widget::tooltip::Position::Bottom).into()
         };
 
         vec![
-            sidebar_toggle.into(),
-            menu_btn("New Note", Message::CreateNewNote, false),
-            menu_btn("Edit", Message::SetViewMode(ViewMode::Editor), self.view_mode == ViewMode::Editor),
-            menu_btn("Split", Message::SetViewMode(ViewMode::Split), self.view_mode == ViewMode::Split),
-            menu_btn("Preview", Message::SetViewMode(ViewMode::Preview), self.view_mode == ViewMode::Preview),
+            sidebar_tip.into(),
+            menu_btn("New Note", "Create New Note (Ctrl+N)", Message::CreateNewNote, false),
+            menu_btn("Edit", "Editor Mode (Ctrl+1)", Message::SetViewMode(ViewMode::Editor), self.view_mode == ViewMode::Editor),
+            menu_btn("Split", "Split Mode (Ctrl+2)", Message::SetViewMode(ViewMode::Split), self.view_mode == ViewMode::Split),
+            menu_btn("Preview", "Preview Mode (Ctrl+3)", Message::SetViewMode(ViewMode::Preview), self.view_mode == ViewMode::Preview),
         ]
     }
 
@@ -229,7 +502,42 @@ impl cosmic::Application for AppModel {
                 cosmic::theme::Button::Text
             })
             .on_press(Message::ToggleSearch);
-        items.push(search_btn.into());
+        let search_tip = widget::tooltip(
+            search_btn,
+            "Filter Notes List (Ctrl+F)",
+            widget::tooltip::Position::Bottom,
+        );
+        items.push(search_tip.into());
+
+        // Quick Switcher Button
+        let qs_btn = button::icon(widget::icon::from_name("edit-find-symbolic").size(18))
+            .class(if self.show_quick_switcher {
+                cosmic::theme::Button::Suggested
+            } else {
+                cosmic::theme::Button::Text
+            })
+            .on_press(Message::OpenQuickSwitcher);
+        let qs_tip = widget::tooltip(
+            qs_btn,
+            "Quick Switcher (Ctrl+P)",
+            widget::tooltip::Position::Bottom,
+        );
+        items.push(qs_tip.into());
+
+        // Deep Full-Text Search Button
+        let ft_btn = button::icon(widget::icon::from_name("folder-saved-search-symbolic").size(18))
+            .class(if self.show_fulltext_search {
+                cosmic::theme::Button::Suggested
+            } else {
+                cosmic::theme::Button::Text
+            })
+            .on_press(Message::OpenFullTextSearch);
+        let ft_tip = widget::tooltip(
+            ft_btn,
+            "Full-Text Deep Search (Ctrl+Shift+F)",
+            widget::tooltip::Position::Bottom,
+        );
+        items.push(ft_tip.into());
 
         let info_btn = button::icon(widget::icon::from_name("dialog-information-symbolic").size(18))
             .class(if self.show_context {
@@ -238,7 +546,12 @@ impl cosmic::Application for AppModel {
                 cosmic::theme::Button::Text
             })
             .on_press(Message::ToggleContextDrawer);
-        items.push(info_btn.into());
+        let info_tip = widget::tooltip(
+            info_btn,
+            "Note Details & Backlinks (Ctrl+I)",
+            widget::tooltip::Position::Bottom,
+        );
+        items.push(info_tip.into());
 
         items
     }
@@ -246,16 +559,7 @@ impl cosmic::Application for AppModel {
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
         match message {
             Message::SelectNote(path) => {
-                if !self.open_tabs.contains(&path) {
-                    self.open_tabs.push(path.clone());
-                }
-                if let Ok(note) = self.vault.read_note(&path) {
-                    self.editor_content = EditorContent::with_text(&note.raw_content);
-                    self.content_hash = calculate_content_hash(&note.raw_content);
-                    self.parsed_markdown = widget::markdown::parse(&note.body).collect();
-                    self.active_note = Some(note);
-                    self.selected_note_path = Some(path);
-                }
+                self.select_note(path);
             }
             Message::CreateNewNote => {
                 let note_count = self.notes.len() + 1;
@@ -263,14 +567,14 @@ impl cosmic::Application for AppModel {
                 let initial_content = format!("# Untitled {}\n\nStart typing your note here...", note_count);
                 if let Ok(note) = self.vault.write_note(Path::new(&filename), &initial_content) {
                     let _ = self.vault_index.update_note(&note);
-                    self.editor_content = EditorContent::with_text(&note.raw_content);
-                    self.content_hash = calculate_content_hash(&note.raw_content);
-                    self.parsed_markdown = widget::markdown::parse(&note.body).collect();
-                    self.open_tabs.push(note.path.clone());
-                    self.selected_note_path = Some(note.path.clone());
-                    self.active_note = Some(note.clone());
+                    self.select_note(note.path.clone());
                     self.notes.push(note);
                 }
+            }
+            Message::CreateNoteWithTitle(title) => {
+                self.create_note_with_title(title);
+                self.show_quick_switcher = false;
+                self.show_fulltext_search = false;
             }
             Message::EditorAction(action) => {
                 let is_edit = action.is_edit();
@@ -338,13 +642,7 @@ impl cosmic::Application for AppModel {
                 if self.selected_note_path.as_ref() == Some(&path) {
                     let next = self.open_tabs.last().cloned();
                     if let Some(next_path) = next {
-                        if let Ok(note) = self.vault.read_note(&next_path) {
-                            self.editor_content = EditorContent::with_text(&note.raw_content);
-                            self.content_hash = calculate_content_hash(&note.raw_content);
-                            self.parsed_markdown = widget::markdown::parse(&note.body).collect();
-                            self.active_note = Some(note);
-                            self.selected_note_path = Some(next_path);
-                        }
+                        self.select_note(next_path);
                     } else {
                         self.active_note = None;
                         self.selected_note_path = None;
@@ -358,6 +656,87 @@ impl cosmic::Application for AppModel {
                 let _ = self.vault_index.handle_vault_event(&event, &self.vault);
                 if let Ok(scanned) = self.vault.scan_notes() {
                     self.notes = scanned;
+                }
+            }
+            Message::OpenQuickSwitcher => {
+                self.show_quick_switcher = true;
+                self.show_fulltext_search = false;
+                self.quick_switcher_query.clear();
+                self.quick_switcher_results = self.vault_index.quick_search("", 15);
+                self.quick_switcher_selected = 0;
+            }
+            Message::CloseQuickSwitcher => {
+                self.show_quick_switcher = false;
+            }
+            Message::QuickSwitcherInputChanged(query) => {
+                self.quick_switcher_query = query;
+                self.quick_switcher_results = self.vault_index.quick_search(&self.quick_switcher_query, 15);
+                self.quick_switcher_selected = 0;
+            }
+            Message::QuickSwitcherSelect(path) => {
+                self.show_quick_switcher = false;
+                self.select_note(path);
+            }
+            Message::OpenFullTextSearch => {
+                self.show_fulltext_search = true;
+                self.show_quick_switcher = false;
+                self.fulltext_query.clear();
+                self.fulltext_results.clear();
+                self.fulltext_selected = 0;
+            }
+            Message::CloseFullTextSearch => {
+                self.show_fulltext_search = false;
+            }
+            Message::FullTextSearchInputChanged(query) => {
+                self.fulltext_query = query;
+                self.fulltext_results = self.vault_index.fulltext_search(&self.fulltext_query, 20).unwrap_or_default();
+                self.fulltext_selected = 0;
+            }
+            Message::CloseModals => {
+                if self.show_quick_switcher || self.show_fulltext_search {
+                    self.show_quick_switcher = false;
+                    self.show_fulltext_search = false;
+                } else if self.search_active {
+                    self.search_active = false;
+                    self.search_query.clear();
+                } else if self.show_context {
+                    self.show_context = false;
+                    self.core.set_show_context(false);
+                }
+            }
+            Message::ModalNavigateDown => {
+                if self.show_quick_switcher && !self.quick_switcher_results.is_empty() {
+                    self.quick_switcher_selected = (self.quick_switcher_selected + 1)
+                        .min(self.quick_switcher_results.len().saturating_sub(1));
+                } else if self.show_fulltext_search && !self.fulltext_results.is_empty() {
+                    self.fulltext_selected = (self.fulltext_selected + 1)
+                        .min(self.fulltext_results.len().saturating_sub(1));
+                }
+            }
+            Message::ModalNavigateUp => {
+                if self.show_quick_switcher {
+                    self.quick_switcher_selected = self.quick_switcher_selected.saturating_sub(1);
+                } else if self.show_fulltext_search {
+                    self.fulltext_selected = self.fulltext_selected.saturating_sub(1);
+                }
+            }
+            Message::ModalSelectCurrent => {
+                if self.show_quick_switcher {
+                    if let Some(m) = self.quick_switcher_results.get(self.quick_switcher_selected) {
+                        let path = m.item.path.clone();
+                        self.show_quick_switcher = false;
+                        self.select_note(path);
+                    } else if !self.quick_switcher_query.trim().is_empty() {
+                        let title = self.quick_switcher_query.trim().to_string();
+                        self.create_note_with_title(title);
+                        self.show_quick_switcher = false;
+                    }
+                } else if self.show_fulltext_search {
+                    if let Some(r) = self.fulltext_results.get(self.fulltext_selected) {
+                        let path = r.path.clone();
+                        self.show_fulltext_search = false;
+                        self.select_note(path);
+                    }
                 }
             }
         }
@@ -383,10 +762,65 @@ impl cosmic::Application for AppModel {
         Task::none()
     }
 
-    fn on_context_drawer(&mut self) -> Task<Self::Message> {
-        self.show_context = !self.show_context;
-        self.core.set_show_context(self.show_context);
-        Task::none()
+    fn dialog(&self) -> Option<Element<'_, Self::Message>> {
+        if self.show_quick_switcher {
+            Some(self.view_quick_switcher())
+        } else if self.show_fulltext_search {
+            Some(self.view_fulltext_search())
+        } else {
+            None
+        }
+    }
+
+    fn subscription(&self) -> cosmic::iced::Subscription<Self::Message> {
+        use cosmic::iced::keyboard::{self, Key, key::Named};
+
+        let global_sub = keyboard::listen().filter_map(|event| {
+            if let keyboard::Event::KeyPressed { key, modifiers, .. } = event {
+                if modifiers.control() {
+                    match key.as_ref() {
+                        Key::Character("p") | Key::Character("P") => Some(Message::OpenQuickSwitcher),
+                        Key::Character("f") | Key::Character("F") if modifiers.shift() => Some(Message::OpenFullTextSearch),
+                        Key::Character("f") | Key::Character("F") => Some(Message::ToggleSearch),
+                        Key::Character("n") | Key::Character("N") => Some(Message::CreateNewNote),
+                        Key::Character("1") => Some(Message::SetViewMode(ViewMode::Editor)),
+                        Key::Character("2") => Some(Message::SetViewMode(ViewMode::Split)),
+                        Key::Character("3") => Some(Message::SetViewMode(ViewMode::Preview)),
+                        Key::Character("\\") => Some(Message::ToggleSidebar),
+                        Key::Character("i") | Key::Character("I") => Some(Message::ToggleContextDrawer),
+                        _ => None,
+                    }
+                } else if matches!(key.as_ref(), Key::Named(Named::Escape)) {
+                    Some(Message::CloseModals)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        });
+
+        if self.show_quick_switcher || self.show_fulltext_search {
+            let modal_sub = keyboard::listen().filter_map(|event| {
+                if let keyboard::Event::KeyPressed { key, modifiers, .. } = event {
+                    if !modifiers.control() && !modifiers.alt() {
+                        match key.as_ref() {
+                            Key::Named(Named::ArrowDown) => Some(Message::ModalNavigateDown),
+                            Key::Named(Named::ArrowUp) => Some(Message::ModalNavigateUp),
+                            Key::Named(Named::Enter) => Some(Message::ModalSelectCurrent),
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            });
+            cosmic::iced::Subscription::batch(vec![global_sub, modal_sub])
+        } else {
+            global_sub
+        }
     }
 
     fn context_drawer(&self) -> Option<ContextDrawer<'_, Self::Message>> {
@@ -503,6 +937,7 @@ impl cosmic::Application for AppModel {
         };
 
         let mut note_items = Column::new().spacing(spacing.space_xxs);
+        let mut items_rendered = 0;
 
         if !self.search_query.trim().is_empty() {
             let matches_index = self.vault_index.quick_search(&self.search_query, 50);
@@ -510,6 +945,7 @@ impl cosmic::Application for AppModel {
                 let is_selected = self.selected_note_path.as_ref() == Some(&m.item.path);
                 if let Some(note) = self.notes.iter().find(|n| n.path == m.item.path) {
                     note_items = note_items.push(render_note_item(note, is_selected));
+                    items_rendered += 1;
                 }
             }
         } else if let Some(ref tag) = self.selected_tag {
@@ -517,12 +953,57 @@ impl cosmic::Application for AppModel {
                 if note.tags.contains(tag) {
                     let is_selected = self.selected_note_path.as_ref() == Some(&note.path);
                     note_items = note_items.push(render_note_item(note, is_selected));
+                    items_rendered += 1;
                 }
             }
         } else {
             for note in &self.notes {
                 let is_selected = self.selected_note_path.as_ref() == Some(&note.path);
                 note_items = note_items.push(render_note_item(note, is_selected));
+                items_rendered += 1;
+            }
+        }
+
+        if items_rendered == 0 {
+            if !self.search_query.trim().is_empty() {
+                let empty_col = Column::new()
+                    .spacing(spacing.space_xs)
+                    .align_x(cosmic::iced::Alignment::Center)
+                    .padding(spacing.space_m)
+                    .push(widget::icon::from_name("system-search-symbolic").size(24))
+                    .push(text::caption(format!("No notes match \"{}\"", self.search_query)))
+                    .push(
+                        button::text("Clear Filter")
+                            .class(cosmic::theme::Button::Text)
+                            .on_press(Message::ToggleSearch),
+                    );
+                note_items = note_items.push(empty_col);
+            } else if let Some(ref tag) = self.selected_tag {
+                let empty_col = Column::new()
+                    .spacing(spacing.space_xs)
+                    .align_x(cosmic::iced::Alignment::Center)
+                    .padding(spacing.space_m)
+                    .push(widget::icon::from_name("tag-symbolic").size(24))
+                    .push(text::caption(format!("No notes tagged #{tag}")))
+                    .push(
+                        button::text("Show All Notes")
+                            .class(cosmic::theme::Button::Text)
+                            .on_press(Message::FilterByTag(None)),
+                    );
+                note_items = note_items.push(empty_col);
+            } else {
+                let empty_col = Column::new()
+                    .spacing(spacing.space_xs)
+                    .align_x(cosmic::iced::Alignment::Center)
+                    .padding(spacing.space_m)
+                    .push(widget::icon::from_name("document-new-symbolic").size(24))
+                    .push(text::caption("No notes yet"))
+                    .push(
+                        button::text("Create Note")
+                            .class(cosmic::theme::Button::Suggested)
+                            .on_press(Message::CreateNewNote),
+                    );
+                note_items = note_items.push(empty_col);
             }
         }
 
