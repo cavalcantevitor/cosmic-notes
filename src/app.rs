@@ -1,4 +1,4 @@
-use cosmic::app::{context_drawer, ContextDrawer, Core, Task};
+use cosmic::app::{ContextDrawer, Core, Task};
 use cosmic::iced::Length;
 use cosmic::widget::text_editor::{self as te, Action as EditorAction, Content as EditorContent};
 use cosmic::widget::{self, button, container, scrollable, text, Column, Row};
@@ -339,124 +339,13 @@ impl cosmic::Application for AppModel {
     }
 
     fn context_drawer(&self) -> Option<ContextDrawer<'_, Self::Message>> {
-        if !self.show_context {
-            return None;
-        }
-        let note = self.active_note.as_ref()?;
-        let spacing = cosmic::theme::spacing();
-
-        // 1. Properties
-        let telemetry_col = Column::new()
-            .spacing(spacing.space_xxs)
-            .push(text::caption("PROPERTIES"))
-            .push(
-                Row::new()
-                    .spacing(spacing.space_s)
-                    .push(text::caption("Words:"))
-                    .push(text::body(note.word_count().to_string()).width(Length::Fill)),
-            )
-            .push(
-                Row::new()
-                    .spacing(spacing.space_s)
-                    .push(text::caption("Characters:"))
-                    .push(text::body(note.char_count().to_string()).width(Length::Fill)),
-            )
-            .push(
-                Row::new()
-                    .spacing(spacing.space_s)
-                    .push(text::caption("Reading Time:"))
-                    .push(text::body(format!("~{} min", note.reading_time_mins())).width(Length::Fill)),
-            )
-            .push(
-                Row::new()
-                    .spacing(spacing.space_s)
-                    .push(text::caption("Modified:"))
-                    .push(text::body(note.formatted_date()).width(Length::Fill)),
-            )
-            .push(
-                Row::new()
-                    .spacing(spacing.space_s)
-                    .push(text::caption("Path:"))
-                    .push(text::caption(note.path.display().to_string()).width(Length::Fill)),
-            );
-
-        // 2. Tags Section
-        let mut tags_col = Column::new().spacing(spacing.space_xs).push(text::caption("TAGS"));
-        if note.tags.is_empty() {
-            tags_col = tags_col.push(text::caption("No tags in this note"));
-        } else {
-            let mut tags_list = Column::new().spacing(spacing.space_xxs);
-            for tag in &note.tags {
-                let tag_btn = button::text(format!("#{tag}"))
-                    .class(cosmic::theme::Button::Text)
-                    .padding([spacing.space_xs, spacing.space_s])
-                    .on_press(Message::FilterByTag(Some(tag.clone())));
-                tags_list = tags_list.push(tag_btn);
-            }
-            tags_col = tags_col.push(tags_list);
-        }
-
-        // 3. Connections: Backlinks & Outgoing Links
-        let backlinks = self.vault_index.backlinks(&note.path);
-        let outgoing = self.vault_index.outgoing_links(&note.path);
-
-        let mut graph_col = Column::new().spacing(spacing.space_xs).push(text::caption("CONNECTIONS"));
-
-        // Backlinks
-        graph_col = graph_col.push(text::caption(format!("Incoming Backlinks ({})", backlinks.len())));
-        if backlinks.is_empty() {
-            graph_col = graph_col.push(text::caption("No incoming backlinks"));
-        } else {
-            for bl in backlinks {
-                let bl_btn = button::text(format!("← {}", bl.source_title))
-                    .class(cosmic::theme::Button::Text)
-                    .padding([spacing.space_xs, spacing.space_s])
-                    .on_press(Message::SelectNote(bl.source_path));
-                graph_col = graph_col.push(bl_btn);
-            }
-        }
-
-        // Outgoing Links
-        graph_col = graph_col.push(text::caption(format!("Outgoing Links ({})", outgoing.len())));
-        if outgoing.is_empty() {
-            graph_col = graph_col.push(text::caption("No outgoing wikilinks"));
-        } else {
-            for link in outgoing {
-                if let Some(target_path) = link.resolved_path {
-                    let link_btn = button::text(format!("→ {}", link.target))
-                        .class(cosmic::theme::Button::Text)
-                        .padding([spacing.space_xs, spacing.space_s])
-                        .on_press(Message::SelectNote(target_path));
-                    graph_col = graph_col.push(link_btn);
-                } else {
-                    let ghost = text::caption(format!("⤑ {} (uncreated)", link.target));
-                    graph_col = graph_col.push(ghost);
-                }
-            }
-        }
-
-        let drawer_content = scrollable(
-            Column::new()
-                .spacing(spacing.space_m)
-                .push(telemetry_col)
-                .push(widget::divider::horizontal::default())
-                .push(tags_col)
-                .push(widget::divider::horizontal::default())
-                .push(graph_col),
-        )
-        .width(Length::Fixed(280.0))
-        .height(Length::Fill);
-
-        let drawer = context_drawer(drawer_content, Message::ToggleContextDrawer)
-            .title("Note Inspector");
-
-        Some(drawer)
+        None
     }
 
     fn view(&self) -> Element<'_, Self::Message> {
         let spacing = cosmic::theme::spacing();
 
-        // 1. Left sidebar pane: 2-Column Tree navigation (COSMIC Files inspired)
+        // 1. Left Sidebar: Notes & Tags Explorer (260px)
         let mut all_tags: Vec<String> = self.notes.iter()
             .flat_map(|n| n.tags.iter().cloned())
             .collect();
@@ -465,7 +354,7 @@ impl cosmic::Application for AppModel {
 
         let mut sidebar_col = Column::new().spacing(spacing.space_s);
 
-        // Section 1: LIBRARY
+        // All Notes item (clean, no artificial "Library" header)
         let all_notes_icon = widget::icon::from_name("folder-symbolic").size(16);
         let all_notes_row = Row::new()
             .spacing(spacing.space_xs)
@@ -484,14 +373,9 @@ impl cosmic::Application for AppModel {
         } else {
             all_notes_btn = all_notes_btn.class(cosmic::theme::Button::Text);
         }
+        sidebar_col = sidebar_col.push(all_notes_btn);
 
-        let library_group = Column::new()
-            .spacing(spacing.space_xxs)
-            .push(text::caption("LIBRARY"))
-            .push(all_notes_btn);
-        sidebar_col = sidebar_col.push(library_group);
-
-        // Section 2: TAGS (if any exist)
+        // Tags Section (if any exist)
         if !all_tags.is_empty() {
             let mut tags_group = Column::new().spacing(spacing.space_xxs).push(text::caption("TAGS"));
 
@@ -527,7 +411,7 @@ impl cosmic::Application for AppModel {
 
         sidebar_col = sidebar_col.push(widget::divider::horizontal::default());
 
-        // Section 3: NOTES
+        // Notes List Section
         let notes_header = if !self.search_query.trim().is_empty() {
             text::caption("SEARCH RESULTS")
         } else if let Some(ref tag) = self.selected_tag {
@@ -598,7 +482,7 @@ impl cosmic::Application for AppModel {
         .width(Length::Fixed(260.0))
         .padding(spacing.space_s);
 
-        // 2. Main Workspace Area: Pure distraction-free writing surface
+        // 2. Center Workspace: Pure distraction-free writing surface
         let center_content: Element<'_, Self::Message> = if let Some(ref _note) = self.active_note {
             let style = widget::markdown::Style::from_palette(cosmic::iced::theme::Palette::DARK);
             let md_settings = widget::markdown::Settings::with_style(style);
@@ -669,6 +553,121 @@ impl cosmic::Application for AppModel {
             .into()
         };
 
+        // 3. Right Inspector Column: Symmetrical counterpart to left sidebar (260px)
+        let inspector_panel = if let Some(ref note) = self.active_note {
+            let mut inspector_col = Column::new().spacing(spacing.space_s);
+
+            // Properties Section
+            let telemetry_col = Column::new()
+                .spacing(spacing.space_xxs)
+                .push(text::caption("PROPERTIES"))
+                .push(
+                    Row::new()
+                        .spacing(spacing.space_s)
+                        .push(text::caption("Words:"))
+                        .push(text::body(note.word_count().to_string()).width(Length::Fill)),
+                )
+                .push(
+                    Row::new()
+                        .spacing(spacing.space_s)
+                        .push(text::caption("Characters:"))
+                        .push(text::body(note.char_count().to_string()).width(Length::Fill)),
+                )
+                .push(
+                    Row::new()
+                        .spacing(spacing.space_s)
+                        .push(text::caption("Reading Time:"))
+                        .push(text::body(format!("~{} min", note.reading_time_mins())).width(Length::Fill)),
+                )
+                .push(
+                    Row::new()
+                        .spacing(spacing.space_s)
+                        .push(text::caption("Modified:"))
+                        .push(text::body(note.formatted_date()).width(Length::Fill)),
+                )
+                .push(
+                    Row::new()
+                        .spacing(spacing.space_s)
+                        .push(text::caption("Path:"))
+                        .push(text::caption(note.path.display().to_string()).width(Length::Fill)),
+                );
+            inspector_col = inspector_col.push(telemetry_col);
+
+            // Tags Section
+            if !note.tags.is_empty() {
+                let mut tags_group = Column::new().spacing(spacing.space_xxs).push(text::caption("TAGS"));
+                for tag in &note.tags {
+                    let tag_btn = button::text(format!("#{tag}"))
+                        .class(cosmic::theme::Button::Text)
+                        .padding([spacing.space_xs, spacing.space_s])
+                        .on_press(Message::FilterByTag(Some(tag.clone())));
+                    tags_group = tags_group.push(tag_btn);
+                }
+                inspector_col = inspector_col
+                    .push(widget::divider::horizontal::default())
+                    .push(tags_group);
+            }
+
+            // Connections Section
+            let backlinks = self.vault_index.backlinks(&note.path);
+            let outgoing = self.vault_index.outgoing_links(&note.path);
+
+            let mut graph_col = Column::new().spacing(spacing.space_xs).push(text::caption("CONNECTIONS"));
+
+            graph_col = graph_col.push(text::caption(format!("Backlinks ({})", backlinks.len())));
+            if backlinks.is_empty() {
+                graph_col = graph_col.push(text::caption("No incoming backlinks"));
+            } else {
+                for bl in backlinks {
+                    let bl_btn = button::text(format!("← {}", bl.source_title))
+                        .class(cosmic::theme::Button::Text)
+                        .padding([spacing.space_xs, spacing.space_s])
+                        .on_press(Message::SelectNote(bl.source_path));
+                    graph_col = graph_col.push(bl_btn);
+                }
+            }
+
+            graph_col = graph_col.push(text::caption(format!("Outgoing Links ({})", outgoing.len())));
+            if outgoing.is_empty() {
+                graph_col = graph_col.push(text::caption("No outgoing wikilinks"));
+            } else {
+                for link in outgoing {
+                    if let Some(target_path) = link.resolved_path {
+                        let link_btn = button::text(format!("→ {}", link.target))
+                            .class(cosmic::theme::Button::Text)
+                            .padding([spacing.space_xs, spacing.space_s])
+                            .on_press(Message::SelectNote(target_path));
+                        graph_col = graph_col.push(link_btn);
+                    } else {
+                        let ghost = text::caption(format!("⤑ {} (uncreated)", link.target));
+                        graph_col = graph_col.push(ghost);
+                    }
+                }
+            }
+
+            inspector_col = inspector_col
+                .push(widget::divider::horizontal::default())
+                .push(graph_col);
+
+            container(
+                scrollable(inspector_col).width(Length::Fill).height(Length::Fill)
+            )
+            .class(cosmic::theme::Container::Background)
+            .width(Length::Fixed(260.0))
+            .padding(spacing.space_s)
+        } else {
+            container(
+                Column::new()
+                    .spacing(spacing.space_s)
+                    .push(text::caption("PROPERTIES"))
+                    .push(text::caption("No note selected"))
+            )
+            .class(cosmic::theme::Container::Background)
+            .width(Length::Fixed(260.0))
+            .padding(spacing.space_s)
+        };
+
+        // Assemble Symmetrical 3-Pane Root Layout
         let mut root_row = Row::new();
 
         if self.show_sidebar {
@@ -677,7 +676,15 @@ impl cosmic::Application for AppModel {
                 .push(widget::divider::vertical::default());
         }
 
-        root_row.push(center_content).into()
+        root_row = root_row.push(center_content);
+
+        if self.show_context {
+            root_row = root_row
+                .push(widget::divider::vertical::default())
+                .push(inspector_panel);
+        }
+
+        root_row.into()
     }
 }
 
