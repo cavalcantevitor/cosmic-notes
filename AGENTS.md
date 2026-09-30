@@ -142,12 +142,21 @@ Every commit in this repository MUST strictly follow the [Conventional Commits v
      - Note telemetry: Word count, character count, estimated reading time, and formatted dates.
    - Reference design approved as **UI v3** (`cosmic_notes_ui_v3.jpg`).
    - Full test suite passing (17 unit tests + 1 integration test, 0 failures, 0 warnings).
+6. **Phase 3: Multi-Column COSMIC Shell & Context Drawer (`src/app.rs`)**:
+   - **Inline Header Search**: Native COSMIC Files style inline input expanding in the header bar adjacent to the magnifying glass icon.
+   - **Collapsible 2-Column Navigation**: Toggleable sidebar (`view-sidebar-symbolic`) with "All Notes" item and tag filter list (`#tag`).
+   - **Native Right-Hand Context Drawer (`cosmic::app::ContextDrawer`)**:
+     - Toggleable via header info button (`dialog-information-symbolic`) or system shortcut (`Ctrl+Space`).
+     - Real-time document telemetry (words, characters, reading time, modified date, relative path).
+     - Tags badges with click-to-filter capability.
+     - Bidirectional links inspector (incoming backlinks & outgoing wikilinks with direct note navigation).
+   - Full test suite passing (17 unit tests + 1 integration test, 0 failures, 0 warnings).
 
 ### Next Session Objective:
-* **Start Phase 3: Multi-Column COSMIC Shell & Context Drawer**:
-  - Implement collapsible left drawer with directory folder tree navigation and tag filter panel.
-  - Implement right-hand `context_drawer` displaying note document statistics (word count, reading time), backlink explorer, and metadata inspector.
-  - Implement global keyboard shortcuts (`Ctrl+P` Quick Switcher modal, `Ctrl+Shift+F` Full-Text Search overlay).
+* **Start Phase 4: Pane Grid Workspace & 120 FPS Lazy Rendering**:
+  - Implement resizable split layout using `cosmic::widget::pane_grid`.
+  - Wrap rendered Markdown preview in `iced::widget::lazy` keyed on `(note_id, content_hash)` for 120 FPS frame-rate protection.
+  - Synchronized scrolling between editor and preview.
 
 
 

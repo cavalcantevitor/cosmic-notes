@@ -200,9 +200,8 @@ To integrate AI capabilities (local LLMs via Ollama/llama.cpp, cloud APIs, auto-
 | **Phase 1+ (Bridge)** | Interactive Desktop Shell & Live Editor | **Completed** | Native `libcosmic` application (`src/app.rs`), note selection sidebar, interactive `text_editor` widget, live Split-view markdown preview, auto-save to vault. |
 | **Phase 2** | Dual-Tier Search & Knowledge Graph Engine | **Completed** | In-memory `nucleo` fuzzy matcher (`Ctrl+P`), `tantivy` BM25 inverted index in `.cosmic-notes/index/` (`Ctrl+Shift+F`), and `petgraph` bidirectional link topology with backlinks and orphan detection. |
 | **Phase 2.5** | UI/UX & Native COSMIC Files Polish | **Completed** | Native COSMIC Files styling: top-left menu actions (`New Note`, `Edit`, `Split`, `Preview`), top-right search button adjacent to window controls, dark sidebar background, breadcrumbs tab bar, and borderless editor without focus rings. |
-| **Phase 3** | Multi-Column COSMIC Shell & Context Drawer | **Next in Line** | Directory folder tree, tag filter panel, right-hand `context_drawer` with document stats, backlinks, outgoing links. |
-
-| **Phase 4** | Pane Grid Workspace & 120 FPS Lazy Rendering | **Upcoming** | Resizable split layout via `cosmic::widget::pane_grid`, cached preview with `iced::widget::lazy` keyed on `(note_id, content_hash)`. |
+| **Phase 3** | Multi-Column COSMIC Shell & Context Drawer | **Completed** | Inline header search input, collapsible sidebar with toggle button, tag filtering, and native right-hand Context Drawer with telemetry, tags, and bidirectional links. |
+| **Phase 4** | Pane Grid Workspace & 120 FPS Lazy Rendering | **Next in Line** | Resizable split layout via `cosmic::widget::pane_grid`, cached preview with `iced::widget::lazy` keyed on `(note_id, content_hash)`. |
 | **Phase 5** | Quick Switcher & Full-Text Search Overlays | **Upcoming** | Global search palette modal (`Ctrl+P`) and full-text search results panel (`Ctrl+Shift+F`). |
 | **Phase 6** | Future-Proof Contracts (Git & AI/MCP) | **Upcoming** | `VaultSyncEngine` trait and `AgentVaultApi` MCP-ready tool abstraction. |
 
