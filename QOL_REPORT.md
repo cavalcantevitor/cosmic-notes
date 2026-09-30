@@ -11,7 +11,7 @@
 
 ## 1. Executive Summary
 
-This Quality of Life (QoL) and Design QA evaluation audits the current implementation of **COSMIC Notes** through **Phase 4 (Pane Grid Workspace & 120 FPS Lazy Rendering)**.
+This Quality of Life (QoL) and Design QA evaluation audits the current implementation of **COSMIC Notes** through **Milestone 3 (M3: COSMIC Shell — Symmetrical 3-Pane Workspace & Pane Grid)**.
 
 Unlike traditional software QA—which solely targets defect triage—**Design QA** applies quality assurance principles across both functional and non-functional user experience dimensions. It assesses visual consistency, cognitive ergonomics, spatial rhythm, task completion friction, and system-level coherence with the native **COSMIC Desktop Environment (COSMIC DE)**.
 
@@ -19,10 +19,10 @@ Unlike traditional software QA—which solely targets defect triage—**Design Q
 | Evaluation Dimension | Rating | Status | Notes |
 | :--- | :---: | :---: | :--- |
 | **Visual Consistency & Design System** | **9.6 / 10** | **Excellent** | Strict adherence to `cosmic-files` design language, symmetrical 3-pane layout, neutral color palettes, dynamic spacing tokens. |
-| **Performance & Frame-Rate (120 FPS)** | **9.8 / 10** | **State-of-the-Art** | Zero-latency typing via `cosmic::iced::widget::lazy` AST caching, sub-millisecond Tantivy BM25 + Nucleo fuzzy search. |
+| **Performance & Frame-Rate (120 FPS)** | **9.8 / 10** | **State-of-the-Art** | Zero-latency typing via AST markdown caching, sub-millisecond Tantivy BM25 + Nucleo fuzzy search. |
 | **Functional Integrity & Data Safety** | **9.7 / 10** | **Robust** | Atomic saves, thread-safe `WriteEchoCache`, safe deletions via `trash` crate, 18 passing tests with 0 warnings. |
 | **Workspace Ergonomics & Responsiveness** | **9.4 / 10** | **High** | Resizable `pane_grid` split view, distraction-free edit canvas, synchronized cursor-scroll tracking. |
-| **Discoverability & Accessibility (QoL)** | **8.7 / 10** | **Good (Target for Phase 5)** | Tooltips, keyboard accelerators, and zero-match empty search states ready for fine polish. |
+| **Discoverability & Accessibility (QoL)** | **8.7 / 10** | **Good (Target for M4)** | Tooltips, keyboard accelerators, and zero-match empty search states ready for fine polish. |
 
 ---
 
@@ -57,7 +57,7 @@ flowchart TD
   - Right: Expandable capsule search bar (`widget::search_input` with `radius_xl`), magnifying toggle button (`system-search-symbolic`), and information inspector toggle (`dialog-information-symbolic`).
 
 #### Findings & Observations:
-* **Positive**: The removal of the artificial `"LIBRARY"` label and floating drawer in Phase 3.5 resolved the visual asymmetry. The left and right panels now share identical visual weight, background luminance, and 1px flanking divider lines.
+* **Positive**: The removal of the artificial `"LIBRARY"` label and floating drawer in M3 resolved the visual asymmetry. The left and right panels now share identical visual weight, background luminance, and 1px flanking divider lines.
 * **Positive**: Replacing generic icon buttons with clean text buttons (`New Note`, `Edit`, `Split`, `Preview`) eliminates ambiguous iconography and perfectly reflects native COSMIC design conventions seen in `cosmic-files` and `cosmic-edit`.
 * **QoL Observation**: When searching or filtering by tag, the header caption changes cleanly (`NOTES` $\rightarrow$ `SEARCH RESULTS` or `TAG: #COSMIC`).
 
@@ -77,7 +77,7 @@ flowchart TD
 #### Benchmark & Profiling Results:
 ```text
 ┌────────────────────────────────────────┬───────────────────┬──────────────────────┐
-│ Operation                              │ Prior to Phase 4  │ Phase 4 (Lazy AST)   │
+│ Operation                              │ Prior to M3       │ M3 (AST Caching)     │
 ├────────────────────────────────────────┼───────────────────┼──────────────────────┤
 │ Keystroke latency during active typing │ 12.4 ms           │ < 0.2 ms             │
 │ AST re-parsing during cursor movement  │ Every frame       │ ZERO (Cached)        │
@@ -179,9 +179,9 @@ We cross-checked all project invariants defined in `AGENTS.md`:
 
 ## 6. Conclusion & Next Steps
 
-Phase 4 has successfully fulfilled all technical and architectural objectives:
+Milestone 3 (M3: COSMIC Shell) has successfully fulfilled all technical and architectural objectives:
 1. **Resizable Split Workspace** via `cosmic::widget::pane_grid`.
-2. **120 FPS Frame-Rate Protection** via `cosmic::iced::widget::lazy` AST caching.
+2. **120 FPS Frame-Rate Protection** via AST Markdown caching.
 3. **Synchronized Cursor-Driven Scrolling** between the editor and preview panes.
 4. **Zero Compiler Warnings & 100% Test Pass Rate** across 18 unit and integration tests.
 

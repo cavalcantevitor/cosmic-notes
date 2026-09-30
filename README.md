@@ -121,14 +121,17 @@ COSMIC Notes undergoes continuous **Design QA** and Quality of Life (QoL) audits
 
 ---
 
-## 🗺️ Roadmap
+## 🗺️ Roadmap & Milestones
 
-- [x] **Phase 1**: Headless Vault Engine, atomic saving, write-echo cancellation, safe trash deletion.
-- [x] **Phase 2**: Dual-Tier Search (Nucleo + Tantivy) and Bidirectional Knowledge Graph (`petgraph`).
-- [x] **Phase 3**: Native COSMIC Shell, symmetrical 3-pane layout, docked note inspector.
-- [x] **Phase 4**: Resizable `pane_grid` split workspace and synchronized scrolling.
-- [ ] **Phase 5**: Global Quick Switcher palette (`Ctrl+P`) and Full-Text Search overlay (`Ctrl+Shift+F`).
-- [ ] **Phase 6**: Future-Proof Contracts: Pure-Rust Git Sync (`gix`) and Model Context Protocol (MCP) AI Assistant tool integration.
+| Target Milestone | Release Tag | Primary Capability Theme | Status | Scope & Deliverables |
+|---|---|---|---|---|
+| **M0: Scaffold** | `v0.1.0-alpha` | **Workspace & Foundation** | **Completed** | Cargo 2024 workspace, `.pkgconfig` for `xkbcommon`, `Note`/`Frontmatter` models, `WriteEchoCache`, `VaultWatcher` via `notify-debouncer-full`. |
+| **M1: Core Editor** | `v0.2.0-alpha` | **Desktop Shell & Editing** | **Completed** | Native `libcosmic` shell (`src/app.rs`), interactive `cosmic-text` buffer, live split-preview, atomic disk saves, safe trash deletion. |
+| **M2: Knowledge & Search** | `v0.3.0-alpha` | **Indexing & Bidirectional Links** | **Completed** | In-memory `nucleo` fuzzy switcher, `tantivy` BM25 inverted index in `.cosmic-notes/index/`, `petgraph` link graph, backlink/orphan resolution. |
+| **M3: COSMIC Shell** | `v0.4.0-alpha` | **Symmetrical 3-Pane Workspace** | **Completed** | Dual 260px docked panels (Explorer & Inspector), pill search input, context drawer telemetry, pane grid workspace with AST caching (120 FPS target). |
+| **M4: Search Experience** | `v0.5.0-beta` | **Modal Overlays & Hotkeys** | **Active** | Floating Quick Switcher palette (`Ctrl+P`), deep-search overlay panel (`Ctrl+Shift+F`), tooltips, keyboard navigation, and zero-match states. |
+| **M5: Ecosystem Extensibility** | `v0.6.0-beta` | **Sync & Agent Abstractions** | **Planned** | Trait definitions for `VaultSyncEngine` (`gix`/`git2`) and MCP-compatible `AgentVaultApi` (`cosmic::iced::stream::channel`). |
+| **v1.0: GA Release** | `v1.0.0` | **General Availability** | **Planned** | Packaging (Flatpak/COSMIC Store), settings persistence via `cosmic-config`, first stable user release. |
 
 ---
 

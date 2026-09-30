@@ -110,73 +110,38 @@ Every commit in this repository MUST strictly follow the [Conventional Commits v
 
 ## 7. Current Project State & Session Handoff (Where to Continue)
 
-### Completed Components:
-1. **Repository & Build Setup**:
+### Completed Milestones:
+1. **Milestone 0 (M0: Scaffold — `v0.1.0-alpha`)**:
    - Initialized Git repository on branch `main`.
    - `Cargo.toml` configured with Rust 2024 edition (1.95+) and all core dependencies (`libcosmic`, `tokio`, `notify-debouncer-full`, `tantivy`, `nucleo`, `petgraph`, `trash`, `pulldown-cmark`, `serde_yaml`, `thiserror`, `anyhow`).
    - Wayland `xkbcommon` linking configured via local `.pkgconfig/` and `.cargo/config.toml`.
-2. **Headless Vault Engine (`src/core/`)**:
-   - [`src/core/note.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/src/core/note.rs): Domain model, YAML frontmatter parsing, inline `#tag` extraction (skips headers/code blocks), and `[[wikilink]]` extraction.
-   - [`src/core/write_echo.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/src/core/write_echo.rs): Thread-safe `WriteEchoCache` preventing file watcher feedback loops during saves.
-   - [`src/core/vault.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/src/core/vault.rs): Local vault scanner, atomic file saves, sidecar `.cosmic-notes/.gitignore` setup, and safe trash deletion via `trash`.
-   - [`src/core/watcher.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/src/core/watcher.rs): Debounced background filesystem watcher (`notify-debouncer-full`) with write-echo filtering.
-   - [`tests/vault_integration.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/tests/vault_integration.rs): Full integration tests passing (write-echo cancellation and external file detection).
-3. **Interactive Desktop Application Shell (`src/app.rs` & `src/main.rs`)**:
-   - `cosmic::Application` implementation runnable via `cargo run`.
-   - Sidebar with search input for instant fuzzy note filtering, note list navigation, and "New Note" creation.
-   - Multi-line live text editor (`cosmic::widget::text_editor`) with automatic persistence to disk and write-echo cancellation.
-   - View mode switching (**Edit** | **Split** | **Preview**) with live AST Markdown rendering.
-   - Live bidirectional backlinks and outgoing links panel below notes.
-4. **Dual-Tier Search & Knowledge Graph Engine (`src/search/` & `src/graph/`)**:
-   - [`src/search/fuzzy.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/src/search/fuzzy.rs): Microsecond fuzzy matcher (`nucleo`) indexing title, path, and tags with pure `&self` querying.
-   - [`src/search/fulltext.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/src/search/fulltext.rs): Sub-millisecond Tantivy BM25 inverted index with field boosting and highlighted snippet generation.
-   - [`src/graph/mod.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/src/graph/mod.rs): Bidirectional knowledge graph (`petgraph`) resolving wikilinks, computing incoming backlinks, outgoing links, unresolved links, and orphan notes.
-   - [`src/search/mod.rs`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/src/search/mod.rs): Unified `VaultIndex` coordinator reactive to `VaultEvent` disk mutations.
-   - Full test suite passing across all units and integration tests (16 unit tests + 1 integration test, 0 failures, 0 warnings).
-5. **Phase 2.5: UI/UX & Native COSMIC Files Polish (`src/app.rs` & `src/core/note.rs`)**:
-   - Realigned layout to match native **COSMIC Files** (`cosmic-files`):
-     - Top-left menu buttons: clean text buttons (`New Note`, `Edit`, `Split`, `Preview`).
-     - Top-right search button: `system-search-symbolic` toggle directly adjacent to window controls (`-`, `⤢`, `✕`).
-     - Left sidebar: Dark navy/slate background tone matching COSMIC Files sidebar (`Container::Background`), with vertical note items (document icon, title, formatted date, rounded selection highlight).
-     - Workspace: Borderless Markdown editor without active outline ring that blends seamlessly into the surface.
-     - Note telemetry: Word count, character count, estimated reading time, and formatted dates.
-   - Reference design approved as **UI v3** (`cosmic_notes_ui_v3.jpg`).
-   - Full test suite passing (17 unit tests + 1 integration test, 0 failures, 0 warnings).
-6. **Phase 3: Multi-Column COSMIC Shell & Context Drawer (`src/app.rs`)**:
-   - **Inline Header Search**: Native COSMIC Files style inline input expanding in the header bar adjacent to the magnifying glass icon.
-   - **Collapsible 2-Column Navigation**: Toggleable sidebar (`view-sidebar-symbolic`) with "All Notes" item and tag filter list (`#tag`).
-   - **Native Right-Hand Context Drawer (`cosmic::app::ContextDrawer`)**:
-     - Toggleable via header info button (`dialog-information-symbolic`) or system shortcut (`Ctrl+Space`).
-     - Real-time document telemetry (words, characters, reading time, modified date, relative path).
-     - Tags badges with click-to-filter capability.
-     - Bidirectional links inspector (incoming backlinks & outgoing wikilinks with direct note navigation).
-   - Full test suite passing (17 unit tests + 1 integration test, 0 failures, 0 warnings).
-7. **Phase 3.5: Symmetrical 3-Pane Navigation & Polish (`src/app.rs`)**:
-   - Fixed sidebar toggle icon by using `"sidebar-places-symbolic"` (the official Pop!_OS and `cosmic-icons` theme identifier used by `cosmic-files`).
-   - Restyled inline search with native `widget::search_input` featuring capsule/pill border radius (`radius_xl`) and inset search glyph.
-   - Converted right side to an in-window **Docked Inspector Column** (Option 1):
-     - Perfect symmetry: Left Explorer (260px) and Right Inspector (260px) both use `Container::Background` (dark slate navy).
-     - Both panels are flanked by subtle 1px vertical dividers around the central borderless writing canvas.
-     - Removed artificial `"LIBRARY"` header label from the left sidebar for clean, direct note navigation.
-     - Matching button padding (`[spacing.space_xs, spacing.space_s]`) and rounded corner highlights throughout.
-   - Fully documented all phases in `PROJECT_NOTES.md`.
-   - Full test suite passing (17 unit tests + 1 integration test, 0 failures, 0 warnings).
-
-8. **Phase 4: Pane Grid Workspace & 120 FPS Lazy Rendering (`src/app.rs`)**:
+   - Headless Vault Engine (`src/core/`): domain model, frontmatter parsing, `WriteEchoCache`, `VaultWatcher` with debounced file notifications, safe deletion via `trash`.
+   - Integration tests passing (`tests/vault_integration.rs`).
+2. **Milestone 1 (M1: Core Editor — `v0.2.0-alpha`)**:
+   - `cosmic::Application` desktop shell implementation (`src/app.rs`).
+   - Multi-line live text editor (`cosmic::widget::text_editor`) with automatic disk persistence and write-echo cancellation.
+   - Initial view modes (Edit, Split, Preview) with AST Markdown rendering.
+3. **Milestone 2 (M2: Knowledge & Search — `v0.3.0-alpha`)**:
+   - Microsecond fuzzy matcher (`nucleo`) in `src/search/fuzzy.rs` for title, path, and tag querying.
+   - Sub-millisecond Tantivy BM25 inverted index in `src/search/fulltext.rs` with field boosting and highlighted snippets.
+   - Bidirectional knowledge graph (`petgraph`) in `src/graph/mod.rs` resolving wikilinks, backlinks, and orphan notes.
+   - Unified `VaultIndex` coordinator in `src/search/mod.rs` reactive to `VaultEvent` disk mutations.
+4. **Milestone 3 (M3: COSMIC Shell — `v0.4.0-alpha`)**:
+   - Realigned layout to match native **COSMIC Files** (`cosmic-files`).
+   - Symmetrical 3-pane navigation shell: 260px left Explorer and 260px right Inspector with `Container::Background` (dark slate navy) and 1px vertical dividers.
+   - Header bar with `sidebar-places-symbolic` toggle, text action buttons, and capsule search input (`widget::search_input` with `radius_xl`).
+   - Real-time note telemetry (word count, reading time, modified date, relative path), tags badges, and bidirectional backlinks explorer.
    - Resizable side-by-side split layout using `cosmic::widget::pane_grid`.
-   - 120 FPS frame-rate protection with `cosmic::iced::widget::lazy` AST caching keyed on `(note_id, content_hash)`, eliminating layout thrashing and AST re-parsing during cursor navigation and active typing.
-   - Synchronized cursor-driven scrolling in `Split` mode via `iced_scrollable::snap_to`.
-   - Full test suite passing (18/18 tests passing, 0 failures, 0 warnings).
-9. **Phase 4.5: Design QA & Quality of Life (QoL) Audit (`QOL_REPORT.md`)**:
-   - Comprehensive Design QA report written based on *Business of Apps* and *AppLighter* frameworks.
-   - Evaluated visual consistency, 120 FPS performance, reliability invariants, and workspace ergonomics.
-   - Prioritized minor usability enhancements: system tooltips, keyboard accelerators (`Ctrl+N`, `Ctrl+1/2/3`), and friendly zero-match search states.
+   - 120 FPS frame-rate protection with cached AST markdown parsing keyed on content hash.
+   - Synchronized scrolling in split view.
+   - UI/UX Design QA and Quality of Life audit completed ([`QOL_REPORT.md`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/QOL_REPORT.md)).
+   - Full test suite passing (18/18 unit and integration tests passing, 0 warnings).
 
-### Next Session Objective:
-* **Start Phase 5: Quick Switcher & Full-Text Search Overlays**:
-  - Global `Ctrl+P` modal quick-switcher with `nucleo` fuzzy matching.
-  - Global `Ctrl+Shift+F` full-text search overlay with Tantivy BM25 highlighted snippets.
-  - Implement prioritized QoL items from `QOL_REPORT.md` (tooltips and keyboard accelerators).
+### Active Milestone:
+* **Milestone 4 (M4: Search Experience — `v0.5.0-beta`)**:
+  - Global `Ctrl+P` modal quick-switcher palette with `nucleo` fuzzy matching.
+  - Global `Ctrl+Shift+F` full-text deep search overlay with Tantivy BM25 highlighted snippets.
+  - Prioritized QoL improvements: system tooltips on header buttons, keyboard accelerators (`Ctrl+N`, `Ctrl+1/2/3`), and friendly zero-match empty search states.
 
 
 

@@ -209,20 +209,14 @@ To integrate AI capabilities (local LLMs via Ollama/llama.cpp, cloud APIs, auto-
 
 ---
 
-## 6. Implementation Roadmap & Current Status
+## 6. Implementation Roadmap & Milestones
 
-| Phase | Description | Status | Details |
-|---|---|---|---|
-| **Phase 0** | Workspace & Tooling Initialization | **Completed** | Git repo on `main`, Cargo.toml with 2024 edition & all core deps, local `.pkgconfig` for xkbcommon linking, root `.gitignore`. |
-| **Phase 1** | Headless Vault Engine Foundation | **Completed** | `Note`, `Frontmatter`, inline tags, wikilinks, `WriteEchoCache`, atomic disk saves, safe trash deletion, `VaultWatcher` via `notify-debouncer-full`, passing test suite. |
-| **Phase 1+ (Bridge)** | Interactive Desktop Shell & Live Editor | **Completed** | Native `libcosmic` application (`src/app.rs`), note selection sidebar, interactive `text_editor` widget, live Split-view markdown preview, auto-save to vault. |
-| **Phase 2** | Dual-Tier Search & Knowledge Graph Engine | **Completed** | In-memory `nucleo` fuzzy matcher (`Ctrl+P`), `tantivy` BM25 inverted index in `.cosmic-notes/index/` (`Ctrl+Shift+F`), and `petgraph` bidirectional link topology with backlinks and orphan detection. |
-| **Phase 2.5** | UI/UX & Native COSMIC Files Polish | **Completed** | Native COSMIC Files styling: top-left menu actions (`New Note`, `Edit`, `Split`, `Preview`), top-right search button adjacent to window controls, dark sidebar background, and borderless editor without focus rings. Cleaned clutter (removed tabs, breadcrumbs, pencil icon). |
-| **Phase 3** | Multi-Column COSMIC Shell & Context Drawer | **Completed** | Inline header search input, collapsible sidebar with toggle button, tag filtering, and right-hand inspector with telemetry, tags, and bidirectional links. |
-| **Phase 3.5** | Symmetrical 3-Pane Navigation & Polish | **Completed** | Full visual parity between Left Explorer and Right Inspector (docked 260px columns with `Container::Background`), removed artificial Library header, fixed `sidebar-places-symbolic` icon, and pill-rounded `widget::search_input`. |
-| **Phase 4** | Pane Grid Workspace & 120 FPS Lazy Rendering | **Completed** | Resizable split layout via `cosmic::widget::pane_grid`, 120 FPS frame-rate protection with `cosmic::iced::widget::lazy` AST caching keyed on `(note_id, content_hash)`, synchronized cursor-driven scroll positioning, and zero compiler warnings (18/18 tests passing). |
-| **Phase 4.5** | UI/UX Quality Assurance & QoL Evaluation | **Completed** | Comprehensive Design QA audit in `QOL_REPORT.md` based on Business of Apps & AppLighter frameworks. Identified prioritized QoL enhancements (tooltips, shortcuts, zero-match search states). |
-| **Phase 5** | Quick Switcher & Full-Text Search Overlays | **Upcoming** | Global search palette modal (`Ctrl+P`) and full-text search results panel (`Ctrl+Shift+F`). |
-| **Phase 6** | Future-Proof Contracts (Git & AI/MCP) | **Upcoming** | `VaultSyncEngine` trait and `AgentVaultApi` MCP-ready tool abstraction. |
-
-
+| Target Milestone | Release Tag | Primary Capability Theme | Status | Scope & Deliverables |
+|---|---|---|---|---|
+| **M0: Scaffold** | `v0.1.0-alpha` | **Workspace & Foundation** | **Completed** | Cargo 2024 workspace, `.pkgconfig` for `xkbcommon`, `Note`/`Frontmatter` models, `WriteEchoCache`, `VaultWatcher` via `notify-debouncer-full`. |
+| **M1: Core Editor** | `v0.2.0-alpha` | **Desktop Shell & Editing** | **Completed** | Native `libcosmic` shell (`src/app.rs`), interactive `cosmic-text` buffer, live split-preview, atomic disk saves, safe trash deletion. |
+| **M2: Knowledge & Search** | `v0.3.0-alpha` | **Indexing & Bidirectional Links** | **Completed** | In-memory `nucleo` fuzzy switcher, `tantivy` BM25 inverted index in `.cosmic-notes/index/`, `petgraph` link graph, backlink/orphan resolution. |
+| **M3: COSMIC Shell** | `v0.4.0-alpha` | **Symmetrical 3-Pane Workspace** | **Completed** | Dual 260px docked panels (Explorer & Inspector), pill search input, context drawer telemetry, pane grid workspace with `lazy` AST caching (120 FPS target). |
+| **M4: Search Experience** | `v0.5.0-beta` | **Modal Overlays & Hotkeys** | **Active** | Floating Quick Switcher palette (`Ctrl+P`), deep-search overlay panel (`Ctrl+Shift+F`), tooltips, keyboard navigation, and zero-match states. |
+| **M5: Ecosystem Extensibility** | `v0.6.0-beta` | **Sync & Agent Abstractions** | **Planned** | Trait definitions for `VaultSyncEngine` (`gix`/`git2`) and MCP-compatible `AgentVaultApi` (`cosmic::iced::stream::channel`). |
+| **v1.0: GA Release** | `v1.0.0` | **General Availability** | **Planned** | Packaging (Flatpak/COSMIC Store), settings persistence via `cosmic-config`, first stable user release. |
