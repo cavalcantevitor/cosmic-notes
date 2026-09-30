@@ -1,5 +1,5 @@
 use cosmic_notes::agent::{AgentVaultApi, DefaultAgentVaultApi, mcp_tool_definitions};
-use cosmic_notes::core::{Vault, WriteEchoCache};
+use cosmic_notes::core::{Vault, VaultFolder, WriteEchoCache};
 use cosmic_notes::search::VaultIndex;
 use cosmic_notes::sync::{MockSyncEngine, VaultSyncEngine};
 use std::fs;
@@ -259,6 +259,62 @@ fn test_m5_extensibility_sync_and_agent_api() {
     let push = sync_engine.push(dir.path()).unwrap();
     assert_eq!(push.pushed_commits, 1);
     assert_eq!(push.conflicts.len(), 0);
+}
+
+#[test]
+fn test_m6_vault_hierarchy_and_folders() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let vault = Vault::open(dir.path()).expect("Failed to open vault");
+
+    // 1. Create folders
+    let work_folder = vault.create_folder(Path::new("Work")).expect("Create Work folder");
+    assert_eq!(work_folder, std::path::PathBuf::from("Work"));
+
+    let projects_folder = vault.create_folder(Path::new("Work/Projects")).expect("Create Work/Projects subfolder");
+    assert_eq!(projects_folder, std::path::PathBuf::from("Work/Projects"));
+
+    let personal_folder = vault.create_folder(Path::new("Personal")).expect("Create Personal folder");
+    assert_eq!(personal_folder, std::path::PathBuf::from("Personal"));
+
+    // 2. Scan folders
+    let scanned_folders = vault.scan_folders().expect("Scan folders");
+    assert_eq!(scanned_folders.len(), 3);
+    assert!(scanned_folders.contains(&std::path::PathBuf::from("Work")));
+    assert!(scanned_folders.contains(&std::path::PathBuf::from("Work/Projects")));
+    assert!(scanned_folders.contains(&std::path::PathBuf::from("Personal")));
+
+    // 3. Write notes in root and inside folders
+    vault.write_note(Path::new("RootNote.md"), "# Root Note\nContent").expect("Write root note");
+    vault.write_note(Path::new("Work/Meeting.md"), "# Work Meeting\nNotes").expect("Write work note");
+    vault.write_note(Path::new("Work/Projects/Roadmap.md"), "# Project Roadmap\nTimeline").expect("Write project note");
+
+    let notes = vault.scan_notes().expect("Scan notes");
+    assert_eq!(notes.len(), 3);
+
+    // 4. Build hierarchical folder tree
+    let tree = VaultFolder::build_tree(&scanned_folders, &notes);
+    assert_eq!(tree.name, "Vault");
+    assert_eq!(tree.total_notes_count(), 3);
+    assert_eq!(tree.note_paths.len(), 1);
+    assert_eq!(tree.note_paths[0], std::path::PathBuf::from("RootNote.md"));
+
+    // Check subfolders
+    assert_eq!(tree.subfolders.len(), 2); // Personal, Work
+    let personal = tree.subfolders.iter().find(|f| f.name == "Personal").expect("Personal folder in tree");
+    assert_eq!(personal.total_notes_count(), 0);
+
+    let work = tree.subfolders.iter().find(|f| f.name == "Work").expect("Work folder in tree");
+    assert_eq!(work.total_notes_count(), 2); // 1 in Work, 1 in Work/Projects
+    assert_eq!(work.note_paths.len(), 1);
+    assert_eq!(work.subfolders.len(), 1);
+    assert_eq!(work.subfolders[0].name, "Projects");
+    assert_eq!(work.subfolders[0].note_paths.len(), 1);
+
+    // 5. Rename folder
+    vault.rename_folder(Path::new("Personal"), Path::new("Private")).expect("Rename folder");
+    let after_rename = vault.scan_folders().expect("Scan after rename");
+    assert!(after_rename.contains(&std::path::PathBuf::from("Private")));
+    assert!(!after_rename.contains(&std::path::PathBuf::from("Personal")));
 }
 
 

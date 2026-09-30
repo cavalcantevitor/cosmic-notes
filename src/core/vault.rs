@@ -275,6 +275,91 @@ impl Vault {
 
         self.read_note(&to_rel)
     }
+
+    /// Create a new folder on disk within the vault.
+    pub fn create_folder(&self, relative_path: &Path) -> Result<PathBuf> {
+        let rel_path = self.validate_relative_path(relative_path)?;
+        let abs_path = self.resolve_path(&rel_path);
+
+        if !abs_path.exists() {
+            fs::create_dir_all(&abs_path).map_err(|e| VaultError::Io {
+                path: abs_path.clone(),
+                source: e,
+            })?;
+        }
+
+        Ok(rel_path)
+    }
+
+    /// Rename an existing directory within the vault.
+    pub fn rename_folder(&self, from_rel: &Path, to_rel: &Path) -> Result<()> {
+        let from_rel = self.validate_relative_path(from_rel)?;
+        let to_rel = self.validate_relative_path(to_rel)?;
+
+        let from_abs = self.resolve_path(&from_rel);
+        let to_abs = self.resolve_path(&to_rel);
+
+        if !from_abs.is_dir() {
+            return Err(VaultError::NoteNotFound { path: from_abs });
+        }
+
+        if let Some(parent) = to_abs.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent).map_err(|e| VaultError::Io {
+                    path: parent.to_path_buf(),
+                    source: e,
+                })?;
+            }
+        }
+
+        fs::rename(&from_abs, &to_abs).map_err(|e| VaultError::Io {
+            path: to_abs,
+            source: e,
+        })?;
+
+        Ok(())
+    }
+
+    /// Safely delete a directory and all contained files by moving to system trash.
+    pub fn delete_folder(&self, relative_path: &Path) -> Result<()> {
+        let rel_path = self.validate_relative_path(relative_path)?;
+        let abs_path = self.resolve_path(&rel_path);
+
+        if !abs_path.exists() {
+            return Err(VaultError::NoteNotFound { path: abs_path });
+        }
+
+        trash::delete(&abs_path).map_err(|e| VaultError::TrashError {
+            path: abs_path,
+            message: e.to_string(),
+        })?;
+
+        Ok(())
+    }
+
+    /// Scan all directories within the vault (excluding sidecar and hidden dot-dirs).
+    pub fn scan_folders(&self) -> Result<Vec<PathBuf>> {
+        let mut folders = Vec::new();
+
+        for entry in WalkDir::new(&self.root_path)
+            .min_depth(1)
+            .into_iter()
+            .filter_entry(|e| {
+                let name = e.file_name().to_string_lossy();
+                !name.starts_with('.') && name != SIDECAR_DIR
+            })
+            .filter_map(|e| e.ok())
+        {
+            if entry.file_type().is_dir() {
+                if let Ok(rel) = entry.path().strip_prefix(&self.root_path) {
+                    folders.push(rel.to_path_buf());
+                }
+            }
+        }
+
+        folders.sort();
+        Ok(folders)
+    }
 }
 
 #[cfg(test)]
@@ -318,5 +403,29 @@ mod tests {
         // Safe delete (moves to trash)
         vault.delete_note(note1_path).unwrap();
         assert!(!vault.resolve_path(note1_path).exists());
+    }
+
+    #[test]
+    fn test_vault_folder_lifecycle() {
+        let dir = tempdir().unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+
+        // 1. Create folders
+        let created = vault.create_folder(Path::new("projects/rust")).unwrap();
+        assert_eq!(created, PathBuf::from("projects/rust"));
+        assert!(vault.resolve_path(&created).is_dir());
+
+        let folders = vault.scan_folders().unwrap();
+        assert!(folders.contains(&PathBuf::from("projects")));
+        assert!(folders.contains(&PathBuf::from("projects/rust")));
+
+        // 2. Rename folder
+        vault.rename_folder(Path::new("projects/rust"), Path::new("projects/cosmic")).unwrap();
+        assert!(!vault.resolve_path(Path::new("projects/rust")).exists());
+        assert!(vault.resolve_path(Path::new("projects/cosmic")).is_dir());
+
+        // 3. Delete folder to trash
+        vault.delete_folder(Path::new("projects")).unwrap();
+        assert!(!vault.resolve_path(Path::new("projects")).exists());
     }
 }

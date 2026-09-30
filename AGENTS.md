@@ -158,8 +158,15 @@ Every commit in this repository MUST strictly follow the [Conventional Commits v
    - 100% Model Context Protocol (MCP) tool definitions (`vault_read_note`, `vault_write_note`, `vault_search_notes`, `vault_get_backlinks`, `vault_list_notes`).
    - End-to-end integration and smoke tests in `tests/smoke_regression.rs`.
 
+7. **Milestone 6 (M6: Vault Hierarchy & Folders — `v0.7.0-beta`)**:
+   - Collapsible directory tree (chevron-style `▶` / `▼`) with folder icons, note count badges, and indented nesting.
+   - Multi-method folder creation: top header button, sidebar `+` button, inline tree row, modal dialog (`Ctrl+Shift+N`), and path-based auto-creation (`Ideas/App/note.md`).
+   - Full folder lifecycle: create notes inside folders, create nested subfolders, inline folder rename, and safe folder deletion to trash.
+   - UI/UX polish: plain-text Vault header with note count badge, centered zero-match search/filter states, and aligned snippet previews in deep search.
+   - Verified with 31 automated tests (`tests/smoke_regression.rs`).
+
 ### Active Milestone:
-* **Milestone 6 (M6: Quality & Governance — `v0.7.0-beta`)**:
+* **Milestone 7 (M7: Quality & Governance — `v0.8.0-beta`)**:
   - Full Hurff 5-State UI audit across all views.
   - Release Checkpoint Matrix (Architecture & Security, UX Resilience, Quantitative Performance, Functional QA & Regression).
   - Continuous deterministic quality verification via `./scripts/verify.sh`.

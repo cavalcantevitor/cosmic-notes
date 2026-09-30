@@ -1,15 +1,17 @@
 use cosmic::app::{ContextDrawer, Core, Task};
 use cosmic::iced::widget::scrollable::{self as iced_scrollable, RelativeOffset};
+use cosmic::iced::widget::Space;
 use cosmic::iced::Length;
 use cosmic::widget::pane_grid;
 use cosmic::widget::text_editor::{self as te, Action as EditorAction, Content as EditorContent};
 use cosmic::widget::{self, button, container, scrollable, text, Column, Id as ScrollId, Row};
 use cosmic::Element;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
-use crate::core::{Note, Vault, VaultEvent};
+use crate::core::{Note, Vault, VaultEvent, VaultFolder};
 use crate::search::VaultIndex;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -59,6 +61,19 @@ pub enum Message {
     ModalNavigateDown,
     ModalNavigateUp,
     ModalSelectCurrent,
+    // M6: Folder Hierarchy & Management
+    ToggleFolder(PathBuf),
+    StartCreateFolder(Option<PathBuf>),
+    FolderInputChanged(String),
+    SubmitCreateFolder,
+    CancelCreateFolder,
+    StartRenameFolder(PathBuf),
+    RenameFolderInputChanged(String),
+    SubmitRenameFolder,
+    CancelRenameFolder,
+    DeleteFolder(PathBuf),
+    CreateNoteInFolder(PathBuf),
+    OpenFolderCreationModal,
 }
 
 pub struct AppModel {
@@ -88,6 +103,16 @@ pub struct AppModel {
     fulltext_query: String,
     fulltext_results: Vec<crate::search::FullTextSearchResult>,
     fulltext_selected: usize,
+    // M6: Folder tree & management
+    expanded_folders: HashSet<PathBuf>,
+    folders: Vec<PathBuf>,
+    folder_tree: VaultFolder,
+    creating_folder: bool,
+    inline_folder_input: String,
+    folder_to_rename: Option<PathBuf>,
+    rename_folder_input: String,
+    show_folder_modal: bool,
+    parent_folder_for_creation: Option<PathBuf>,
 }
 
 impl AppModel {
@@ -99,8 +124,14 @@ impl AppModel {
             Vault::open(&fallback).expect("Failed to initialize fallback vault")
         });
 
-        // Scan notes on startup
+        // Scan notes and folders on startup
         let mut scanned = vault.scan_notes().unwrap_or_default();
+        let folders = vault.scan_folders().unwrap_or_default();
+        let folder_tree = VaultFolder::build_tree(&folders, &scanned);
+        let mut expanded_folders = HashSet::new();
+        for f in &folders {
+            expanded_folders.insert(f.clone());
+        }
 
         // If vault is completely empty, create a welcome note
         if scanned.is_empty() {
@@ -183,9 +214,22 @@ Click **New Note** above or start editing right here!
             fulltext_query: String::new(),
             fulltext_results: Vec::new(),
             fulltext_selected: 0,
+            expanded_folders,
+            folders,
+            folder_tree,
+            creating_folder: false,
+            inline_folder_input: String::new(),
+            folder_to_rename: None,
+            rename_folder_input: String::new(),
+            show_folder_modal: false,
+            parent_folder_for_creation: None,
         };
 
         (app, Task::none())
+    }
+
+    pub fn rebuild_folder_tree(&mut self) {
+        self.folder_tree = VaultFolder::build_tree(&self.folders, &self.notes);
     }
 
     pub fn select_note(&mut self, path: PathBuf) {
@@ -212,6 +256,7 @@ Click **New Note** above or start editing right here!
             let _ = self.vault_index.update_note(&note);
             self.select_note(note.path.clone());
             self.notes.push(note);
+            self.rebuild_folder_tree();
         }
     }
 
@@ -360,7 +405,10 @@ Click **New Note** above or start editing right here!
                 if let Some(ref snippet) = r.snippet {
                     let cleaned = clean_snippet_preview(snippet);
                     if !cleaned.is_empty() {
-                        card_col = card_col.push(text::caption(cleaned));
+                        let snippet_row = Row::new()
+                            .push(Space::new().width(Length::Fixed(24.0)))
+                            .push(text::caption(cleaned).width(Length::Fill));
+                        card_col = card_col.push(snippet_row);
                     }
                 }
 
@@ -402,6 +450,286 @@ Click **New Note** above or start editing right here!
             .height(Length::Fill)
             .center_x(Length::Fill)
             .center_y(Length::Fill)
+            .into()
+    }
+
+    pub fn view_create_folder_modal(&self) -> Element<'_, Message> {
+        let spacing = cosmic::theme::spacing();
+
+        let title_row = Row::new()
+            .spacing(spacing.space_s)
+            .align_y(cosmic::iced::Alignment::Center)
+            .push(widget::icon::from_name("folder-new-symbolic").size(18))
+            .push(text::title3("Create New Folder").width(Length::Fill))
+            .push(
+                button::icon(widget::icon::from_name("window-close-symbolic").size(16))
+                    .class(cosmic::theme::Button::Text)
+                    .on_press(Message::CloseModals),
+            );
+
+        let input = widget::text_input("Folder name (e.g. Work, Ideas/Project)...", &self.inline_folder_input)
+            .on_input(Message::FolderInputChanged)
+            .on_submit(|_| Message::SubmitCreateFolder)
+            .width(Length::Fill);
+
+        let actions_row = Row::new()
+            .spacing(spacing.space_s)
+            .align_y(cosmic::iced::Alignment::Center)
+            .push(Space::new().width(Length::Fill))
+            .push(
+                button::text("Cancel")
+                    .class(cosmic::theme::Button::Text)
+                    .on_press(Message::CancelCreateFolder),
+            )
+            .push(
+                button::text("Create Folder")
+                    .class(cosmic::theme::Button::Suggested)
+                    .on_press(Message::SubmitCreateFolder),
+            );
+
+        let card_content = Column::new()
+            .spacing(spacing.space_m)
+            .push(title_row)
+            .push(input)
+            .push(actions_row);
+
+        let card = container(card_content)
+            .class(cosmic::theme::Container::Card)
+            .width(Length::Fixed(460.0))
+            .padding(spacing.space_m);
+
+        container(card)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+    }
+
+    pub fn render_tree_view<'a>(&'a self, tree: &'a VaultFolder) -> Element<'a, Message> {
+        let spacing = cosmic::theme::spacing();
+        let mut items: Vec<Element<'a, Message>> = Vec::new();
+
+        if self.creating_folder && self.parent_folder_for_creation.is_none() {
+            items.push(self.render_inline_create_input(0));
+        }
+
+        for subfolder in &tree.subfolders {
+            self.append_folder_node(&mut items, subfolder, 0);
+        }
+
+        for note_path in &tree.note_paths {
+            if let Some(note) = self.notes.iter().find(|n| &n.path == note_path) {
+                items.push(self.render_tree_note(note, 0));
+            }
+        }
+
+        if tree.subfolders.is_empty() && tree.note_paths.is_empty() && !self.creating_folder {
+            let empty_col = Column::new()
+                .spacing(spacing.space_xs)
+                .align_x(cosmic::iced::Alignment::Center)
+                .padding(spacing.space_m)
+                .push(widget::icon::from_name("document-new-symbolic").size(24))
+                .push(text::caption("Vault is empty"))
+                .push(
+                    button::text("Create Note")
+                        .class(cosmic::theme::Button::Suggested)
+                        .on_press(Message::CreateNewNote),
+                );
+            items.push(container(empty_col).width(Length::Fill).center_x(Length::Fill).into());
+        }
+
+        Column::with_children(items).spacing(spacing.space_xxs).into()
+    }
+
+    pub fn append_folder_node<'a>(
+        &'a self,
+        items: &mut Vec<Element<'a, Message>>,
+        folder: &'a VaultFolder,
+        depth: usize,
+    ) {
+        let spacing = cosmic::theme::spacing();
+        let is_expanded = self.expanded_folders.contains(&folder.relative_path);
+        let is_renaming = self.folder_to_rename.as_ref() == Some(&folder.relative_path);
+
+        if is_renaming {
+            let left_padding = depth as u16 * 12;
+            let row = Row::new()
+                .spacing(spacing.space_xxs)
+                .align_y(cosmic::iced::Alignment::Center)
+                .padding([0, 0, 0, left_padding])
+                .push(widget::icon::from_name("folder-symbolic").size(16))
+                .push(
+                    widget::text_input("Folder name...", &self.rename_folder_input)
+                        .on_input(Message::RenameFolderInputChanged)
+                        .on_submit(|_| Message::SubmitRenameFolder)
+                        .width(Length::Fill),
+                )
+                .push(
+                    button::icon(widget::icon::from_name("emblem-ok-symbolic").size(14))
+                        .class(cosmic::theme::Button::Text)
+                        .padding(2)
+                        .on_press(Message::SubmitRenameFolder),
+                )
+                .push(
+                    button::icon(widget::icon::from_name("window-close-symbolic").size(14))
+                        .class(cosmic::theme::Button::Text)
+                        .padding(2)
+                        .on_press(Message::CancelRenameFolder),
+                );
+            items.push(row.into());
+        } else {
+            let chevron_icon = if is_expanded {
+                "pan-down-symbolic"
+            } else {
+                "pan-end-symbolic"
+            };
+
+            let folder_icon = if is_expanded {
+                "folder-open-symbolic"
+            } else {
+                "folder-symbolic"
+            };
+
+            let toggle_row = Row::new()
+                .spacing(spacing.space_xs)
+                .align_y(cosmic::iced::Alignment::Center)
+                .push(widget::icon::from_name(chevron_icon).size(14))
+                .push(widget::icon::from_name(folder_icon).size(16))
+                .push(text::body(&folder.name).width(Length::Fill))
+                .push(text::caption(folder.total_notes_count().to_string()));
+
+            let toggle_btn = button::custom(toggle_row)
+                .width(Length::Fill)
+                .padding([spacing.space_xxs, spacing.space_xs])
+                .class(cosmic::theme::Button::Text)
+                .on_press(Message::ToggleFolder(folder.relative_path.clone()));
+
+            let new_note_btn = button::icon(widget::icon::from_name("document-new-symbolic").size(13))
+                .class(cosmic::theme::Button::Text)
+                .padding(2)
+                .on_press(Message::CreateNoteInFolder(folder.relative_path.clone()));
+            let new_note_tip = widget::tooltip(
+                new_note_btn,
+                "New Note in Folder",
+                widget::tooltip::Position::Top,
+            );
+
+            let new_subfolder_btn = button::icon(widget::icon::from_name("folder-new-symbolic").size(13))
+                .class(cosmic::theme::Button::Text)
+                .padding(2)
+                .on_press(Message::StartCreateFolder(Some(folder.relative_path.clone())));
+            let new_subfolder_tip = widget::tooltip(
+                new_subfolder_btn,
+                "New Subfolder",
+                widget::tooltip::Position::Top,
+            );
+
+            let rename_btn = button::icon(widget::icon::from_name("document-edit-symbolic").size(13))
+                .class(cosmic::theme::Button::Text)
+                .padding(2)
+                .on_press(Message::StartRenameFolder(folder.relative_path.clone()));
+            let rename_tip = widget::tooltip(
+                rename_btn,
+                "Rename Folder",
+                widget::tooltip::Position::Top,
+            );
+
+            let delete_btn = button::icon(widget::icon::from_name("user-trash-symbolic").size(13))
+                .class(cosmic::theme::Button::Text)
+                .padding(2)
+                .on_press(Message::DeleteFolder(folder.relative_path.clone()));
+            let delete_tip = widget::tooltip(
+                delete_btn,
+                "Delete Folder to Trash",
+                widget::tooltip::Position::Top,
+            );
+
+            let left_padding = depth as u16 * 12;
+            let folder_row = Row::new()
+                .spacing(spacing.space_xxs)
+                .align_y(cosmic::iced::Alignment::Center)
+                .padding([0, 0, 0, left_padding])
+                .push(toggle_btn)
+                .push(new_note_tip)
+                .push(new_subfolder_tip)
+                .push(rename_tip)
+                .push(delete_tip);
+
+            items.push(folder_row.into());
+        }
+
+        if is_expanded {
+            if self.creating_folder && self.parent_folder_for_creation.as_ref() == Some(&folder.relative_path) {
+                items.push(self.render_inline_create_input(depth + 1));
+            }
+
+            for sub in &folder.subfolders {
+                self.append_folder_node(items, sub, depth + 1);
+            }
+
+            for note_path in &folder.note_paths {
+                if let Some(note) = self.notes.iter().find(|n| &n.path == note_path) {
+                    items.push(self.render_tree_note(note, depth + 1));
+                }
+            }
+        }
+    }
+
+    pub fn render_inline_create_input<'a>(&'a self, depth: usize) -> Element<'a, Message> {
+        let left_padding = depth as u16 * 12;
+        let row = Row::new()
+            .spacing(cosmic::theme::spacing().space_xxs)
+            .align_y(cosmic::iced::Alignment::Center)
+            .padding([0, 0, 0, left_padding])
+            .push(widget::icon::from_name("folder-symbolic").size(16))
+            .push(
+                widget::text_input("Folder name...", &self.inline_folder_input)
+                    .on_input(Message::FolderInputChanged)
+                    .on_submit(|_| Message::SubmitCreateFolder)
+                    .width(Length::Fill),
+            )
+            .push(
+                button::icon(widget::icon::from_name("emblem-ok-symbolic").size(14))
+                    .class(cosmic::theme::Button::Text)
+                    .padding(2)
+                    .on_press(Message::SubmitCreateFolder),
+            )
+            .push(
+                button::icon(widget::icon::from_name("window-close-symbolic").size(14))
+                    .class(cosmic::theme::Button::Text)
+                    .padding(2)
+                    .on_press(Message::CancelCreateFolder),
+            );
+        row.into()
+    }
+
+    pub fn render_tree_note<'a>(&'a self, note: &'a Note, depth: usize) -> Element<'a, Message> {
+        let spacing = cosmic::theme::spacing();
+        let is_selected = self.selected_note_path.as_ref() == Some(&note.path);
+        let title = if note.title.is_empty() {
+            "Untitled".to_string()
+        } else {
+            note.title.clone()
+        };
+
+        let doc_icon = widget::icon::from_name("text-x-generic-symbolic").size(14);
+
+        let row_content = Row::new()
+            .spacing(spacing.space_xs)
+            .align_y(cosmic::iced::Alignment::Center)
+            .push(doc_icon)
+            .push(text::body(title).width(Length::Fill))
+            .push(text::caption(note.formatted_date()));
+
+        let left_padding = spacing.space_s + (depth as u16 * 12);
+
+        button::custom(row_content)
+            .width(Length::Fill)
+            .padding([spacing.space_xs, spacing.space_s, spacing.space_xs, left_padding])
+            .selected(is_selected)
+            .class(cosmic::theme::Button::ListItem([8.0, 8.0, 8.0, 8.0]))
+            .on_press(Message::SelectNote(note.path.clone()))
             .into()
     }
 }
@@ -484,6 +812,7 @@ impl cosmic::Application for AppModel {
         vec![
             sidebar_tip.into(),
             menu_btn("New Note", "Create New Note (Ctrl+N)", Message::CreateNewNote, false),
+            menu_btn("New Folder", "Create New Folder (Ctrl+Shift+N)", Message::OpenFolderCreationModal, false),
             menu_btn("Edit", "Editor Mode (Ctrl+1)", Message::SetViewMode(ViewMode::Editor), self.view_mode == ViewMode::Editor),
             menu_btn("Split", "Split Mode (Ctrl+2)", Message::SetViewMode(ViewMode::Split), self.view_mode == ViewMode::Split),
             menu_btn("Preview", "Preview Mode (Ctrl+3)", Message::SetViewMode(ViewMode::Preview), self.view_mode == ViewMode::Preview),
@@ -580,6 +909,7 @@ impl cosmic::Application for AppModel {
                     let _ = self.vault_index.update_note(&note);
                     self.select_note(note.path.clone());
                     self.notes.push(note);
+                    self.rebuild_folder_tree();
                 }
             }
             Message::CreateNoteWithTitle(title) => {
@@ -667,6 +997,8 @@ impl cosmic::Application for AppModel {
                 let _ = self.vault_index.handle_vault_event(&event, &self.vault);
                 if let Ok(scanned) = self.vault.scan_notes() {
                     self.notes = scanned;
+                    self.folders = self.vault.scan_folders().unwrap_or_default();
+                    self.rebuild_folder_tree();
                 }
             }
             Message::OpenQuickSwitcher => {
@@ -704,9 +1036,17 @@ impl cosmic::Application for AppModel {
                 self.fulltext_selected = 0;
             }
             Message::CloseModals => {
-                if self.show_quick_switcher || self.show_fulltext_search {
+                if self.show_quick_switcher || self.show_fulltext_search || self.show_folder_modal {
                     self.show_quick_switcher = false;
                     self.show_fulltext_search = false;
+                    self.show_folder_modal = false;
+                } else if self.creating_folder {
+                    self.creating_folder = false;
+                    self.inline_folder_input.clear();
+                    self.parent_folder_for_creation = None;
+                } else if self.folder_to_rename.is_some() {
+                    self.folder_to_rename = None;
+                    self.rename_folder_input.clear();
                 } else if self.search_active {
                     self.search_active = false;
                     self.search_query.clear();
@@ -750,6 +1090,131 @@ impl cosmic::Application for AppModel {
                     }
                 }
             }
+            Message::ToggleFolder(path) => {
+                if self.expanded_folders.contains(&path) {
+                    self.expanded_folders.remove(&path);
+                } else {
+                    self.expanded_folders.insert(path);
+                }
+            }
+            Message::StartCreateFolder(parent) => {
+                self.creating_folder = true;
+                self.inline_folder_input.clear();
+                self.parent_folder_for_creation = parent;
+            }
+            Message::FolderInputChanged(name) => {
+                self.inline_folder_input = name;
+            }
+            Message::SubmitCreateFolder => {
+                let name = self.inline_folder_input.trim().to_string();
+                if !name.is_empty() {
+                    let folder_path = if let Some(ref parent) = self.parent_folder_for_creation {
+                        parent.join(&name)
+                    } else {
+                        PathBuf::from(&name)
+                    };
+                    if let Ok(created) = self.vault.create_folder(&folder_path) {
+                        self.expanded_folders.insert(created.clone());
+                        if let Some(parent) = created.parent() {
+                            if !parent.as_os_str().is_empty() {
+                                self.expanded_folders.insert(parent.to_path_buf());
+                            }
+                        }
+                        self.folders = self.vault.scan_folders().unwrap_or_default();
+                        self.rebuild_folder_tree();
+                    }
+                }
+                self.creating_folder = false;
+                self.show_folder_modal = false;
+                self.inline_folder_input.clear();
+                self.parent_folder_for_creation = None;
+            }
+            Message::CancelCreateFolder => {
+                self.creating_folder = false;
+                self.show_folder_modal = false;
+                self.inline_folder_input.clear();
+                self.parent_folder_for_creation = None;
+            }
+            Message::OpenFolderCreationModal => {
+                self.show_folder_modal = true;
+                self.inline_folder_input.clear();
+                self.parent_folder_for_creation = None;
+            }
+            Message::StartRenameFolder(path) => {
+                self.folder_to_rename = Some(path.clone());
+                self.rename_folder_input = path.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
+            }
+            Message::RenameFolderInputChanged(name) => {
+                self.rename_folder_input = name;
+            }
+            Message::SubmitRenameFolder => {
+                if let Some(ref old_path) = self.folder_to_rename {
+                    let new_name = self.rename_folder_input.trim();
+                    if !new_name.is_empty() {
+                        let new_path = if let Some(parent) = old_path.parent() {
+                            parent.join(new_name)
+                        } else {
+                            PathBuf::from(new_name)
+                        };
+                        if let Ok(()) = self.vault.rename_folder(old_path, &new_path) {
+                            if let Ok(scanned) = self.vault.scan_notes() {
+                                self.notes = scanned;
+                                let _ = self.vault_index.reindex_all(&self.notes);
+                            }
+                            self.folders = self.vault.scan_folders().unwrap_or_default();
+                            if self.expanded_folders.remove(old_path) {
+                                self.expanded_folders.insert(new_path);
+                            }
+                            self.rebuild_folder_tree();
+                        }
+                    }
+                }
+                self.folder_to_rename = None;
+                self.rename_folder_input.clear();
+            }
+            Message::CancelRenameFolder => {
+                self.folder_to_rename = None;
+                self.rename_folder_input.clear();
+            }
+            Message::DeleteFolder(path) => {
+                if let Ok(()) = self.vault.delete_folder(&path) {
+                    self.notes.retain(|n| !n.path.starts_with(&path));
+                    self.open_tabs.retain(|p| !p.starts_with(&path));
+                    if let Some(ref selected) = self.selected_note_path {
+                        if selected.starts_with(&path) {
+                            let next = self.notes.first().map(|n| n.path.clone());
+                            if let Some(next_path) = next {
+                                self.select_note(next_path);
+                            } else {
+                                self.active_note = None;
+                                self.selected_note_path = None;
+                                self.editor_content = EditorContent::new();
+                                self.content_hash = 0;
+                                self.parsed_markdown.clear();
+                            }
+                        }
+                    }
+                    self.folders = self.vault.scan_folders().unwrap_or_default();
+                    self.expanded_folders.remove(&path);
+                    let _ = self.vault_index.reindex_all(&self.notes);
+                    self.rebuild_folder_tree();
+                }
+            }
+            Message::CreateNoteInFolder(folder_rel) => {
+                let note_count = self.notes.len() + 1;
+                let filename = folder_rel.join(format!("Untitled_{note_count}.md"));
+                let initial_content = format!("# Untitled {}\n\nStart typing your note here...", note_count);
+                if let Ok(note) = self.vault.write_note(&filename, &initial_content) {
+                    let _ = self.vault_index.update_note(&note);
+                    self.expanded_folders.insert(folder_rel);
+                    self.folders = self.vault.scan_folders().unwrap_or_default();
+                    self.select_note(note.path.clone());
+                    self.notes.push(note);
+                    self.rebuild_folder_tree();
+                }
+            }
         }
         Task::none()
     }
@@ -778,6 +1243,8 @@ impl cosmic::Application for AppModel {
             Some(self.view_quick_switcher())
         } else if self.show_fulltext_search {
             Some(self.view_fulltext_search())
+        } else if self.show_folder_modal {
+            Some(self.view_create_folder_modal())
         } else {
             None
         }
@@ -793,6 +1260,7 @@ impl cosmic::Application for AppModel {
                         Key::Character("p") | Key::Character("P") => Some(Message::OpenQuickSwitcher),
                         Key::Character("f") | Key::Character("F") if modifiers.shift() => Some(Message::OpenFullTextSearch),
                         Key::Character("f") | Key::Character("F") => Some(Message::ToggleSearch),
+                        Key::Character("n") | Key::Character("N") if modifiers.shift() => Some(Message::OpenFolderCreationModal),
                         Key::Character("n") | Key::Character("N") => Some(Message::CreateNewNote),
                         Key::Character("1") => Some(Message::SetViewMode(ViewMode::Editor)),
                         Key::Character("2") => Some(Message::SetViewMode(ViewMode::Split)),
@@ -850,21 +1318,25 @@ impl cosmic::Application for AppModel {
 
         let mut sidebar_col = Column::new().spacing(spacing.space_s);
 
-        // Vault header with note counter (clean, no blue squircle)
-        let vault_icon = widget::icon::from_name("drive-harddisk-symbolic").size(16);
-        let vault_row = Row::new()
+        // Vault header with note counter (pure text row, no button wrapper, no hover state, no leading icon)
+        let new_folder_btn = button::icon(widget::icon::from_name("folder-new-symbolic").size(14))
+            .class(cosmic::theme::Button::Text)
+            .padding(2)
+            .on_press(Message::StartCreateFolder(None));
+        let new_folder_tip = widget::tooltip(
+            new_folder_btn,
+            "Create Folder",
+            widget::tooltip::Position::Top,
+        );
+
+        let vault_header = Row::new()
             .spacing(spacing.space_xs)
             .align_y(cosmic::iced::Alignment::Center)
-            .push(vault_icon)
-            .push(text::body("Vault").width(Length::Fill))
-            .push(text::caption(self.notes.len().to_string()));
-
-        let vault_btn = button::custom(vault_row)
-            .width(Length::Fill)
             .padding([spacing.space_xs, spacing.space_s])
-            .class(cosmic::theme::Button::Text)
-            .on_press(Message::FilterByTag(None));
-        sidebar_col = sidebar_col.push(vault_btn);
+            .push(text::body("Vault").width(Length::Fill))
+            .push(text::caption(self.notes.len().to_string()))
+            .push(new_folder_tip);
+        sidebar_col = sidebar_col.push(vault_header);
 
         // Tags Section (if any exist)
         if !all_tags.is_empty() {
@@ -898,115 +1370,89 @@ impl cosmic::Application for AppModel {
 
         sidebar_col = sidebar_col.push(widget::divider::horizontal::default());
 
-        // Notes List Section
-        let notes_header = if !self.search_query.trim().is_empty() {
-            text::caption("SEARCH RESULTS")
-        } else if let Some(ref tag) = self.selected_tag {
-            text::caption(format!("TAG: #{}", tag.to_uppercase()))
-        } else {
-            text::caption("NOTES")
-        };
-        sidebar_col = sidebar_col.push(notes_header);
+        let is_filtering = !self.search_query.trim().is_empty() || self.selected_tag.is_some();
 
-        let render_note_item = |note: &Note, is_selected: bool| -> Element<'static, Message> {
-            let title = if note.title.is_empty() {
-                "Untitled".to_string()
+        let explorer_content: Element<'_, Message> = if is_filtering {
+            let filter_header = if !self.search_query.trim().is_empty() {
+                text::caption("SEARCH RESULTS")
+            } else if let Some(ref tag) = self.selected_tag {
+                text::caption(format!("TAG: #{}", tag.to_uppercase()))
             } else {
-                note.title.clone()
+                text::caption("NOTES")
             };
 
-            let doc_icon = widget::icon::from_name("text-x-generic-symbolic").size(16);
+            let mut note_items = Column::new().spacing(spacing.space_xxs).push(filter_header);
+            let mut items_rendered = 0;
 
-            let row_content = Row::new()
-                .spacing(spacing.space_xs)
-                .align_y(cosmic::iced::Alignment::Center)
-                .push(doc_icon)
-                .push(text::body(title).width(Length::Fill))
-                .push(text::caption(note.formatted_date()));
+            if !self.search_query.trim().is_empty() {
+                let matches_index = self.vault_index.quick_search(&self.search_query, 50);
+                for m in matches_index {
+                    if let Some(note) = self.notes.iter().find(|n| n.path == m.item.path) {
+                        note_items = note_items.push(self.render_tree_note(note, 0));
+                        items_rendered += 1;
+                    }
+                }
+            } else if let Some(ref tag) = self.selected_tag {
+                for note in &self.notes {
+                    if note.tags.contains(tag) {
+                        note_items = note_items.push(self.render_tree_note(note, 0));
+                        items_rendered += 1;
+                    }
+                }
+            }
 
-            let item_btn = button::custom(row_content)
-                .width(Length::Fill)
-                .padding([spacing.space_xs, spacing.space_s])
-                .selected(is_selected)
-                .class(cosmic::theme::Button::ListItem([8.0, 8.0, 8.0, 8.0]))
-                .on_press(Message::SelectNote(note.path.clone()));
+            if items_rendered == 0 {
+                let empty_col = if !self.search_query.trim().is_empty() {
+                    Column::new()
+                        .spacing(spacing.space_xs)
+                        .align_x(cosmic::iced::Alignment::Center)
+                        .padding(spacing.space_m)
+                        .push(widget::icon::from_name("view-filter-symbolic").size(24))
+                        .push(text::caption(format!("No notes match \"{}\"", self.search_query)))
+                        .push(
+                            button::text("Clear Filter")
+                                .class(cosmic::theme::Button::Text)
+                                .on_press(Message::ToggleSearch),
+                        )
+                } else if let Some(ref tag) = self.selected_tag {
+                    Column::new()
+                        .spacing(spacing.space_xs)
+                        .align_x(cosmic::iced::Alignment::Center)
+                        .padding(spacing.space_m)
+                        .push(widget::icon::from_name("tag-symbolic").size(24))
+                        .push(text::caption(format!("No notes tagged #{tag}")))
+                        .push(
+                            button::text("Show All Notes")
+                                .class(cosmic::theme::Button::Text)
+                                .on_press(Message::FilterByTag(None)),
+                        )
+                } else {
+                    Column::new()
+                        .spacing(spacing.space_xs)
+                        .align_x(cosmic::iced::Alignment::Center)
+                        .padding(spacing.space_m)
+                        .push(widget::icon::from_name("document-new-symbolic").size(24))
+                        .push(text::caption("No notes yet"))
+                        .push(
+                            button::text("Create Note")
+                                .class(cosmic::theme::Button::Suggested)
+                                .on_press(Message::CreateNewNote),
+                        )
+                };
+                let centered = container(empty_col)
+                    .width(Length::Fill)
+                    .center_x(Length::Fill);
+                note_items = note_items.push(centered);
+            }
 
-            item_btn.into()
+            scrollable(note_items).width(Length::Fill).height(Length::Fill).into()
+        } else {
+            let tree_element = self.render_tree_view(&self.folder_tree);
+            scrollable(tree_element).width(Length::Fill).height(Length::Fill).into()
         };
 
-        let mut note_items = Column::new().spacing(spacing.space_xxs);
-        let mut items_rendered = 0;
-
-        if !self.search_query.trim().is_empty() {
-            let matches_index = self.vault_index.quick_search(&self.search_query, 50);
-            for m in matches_index {
-                let is_selected = self.selected_note_path.as_ref() == Some(&m.item.path);
-                if let Some(note) = self.notes.iter().find(|n| n.path == m.item.path) {
-                    note_items = note_items.push(render_note_item(note, is_selected));
-                    items_rendered += 1;
-                }
-            }
-        } else if let Some(ref tag) = self.selected_tag {
-            for note in &self.notes {
-                if note.tags.contains(tag) {
-                    let is_selected = self.selected_note_path.as_ref() == Some(&note.path);
-                    note_items = note_items.push(render_note_item(note, is_selected));
-                    items_rendered += 1;
-                }
-            }
-        } else {
-            for note in &self.notes {
-                let is_selected = self.selected_note_path.as_ref() == Some(&note.path);
-                note_items = note_items.push(render_note_item(note, is_selected));
-                items_rendered += 1;
-            }
-        }
-
-        if items_rendered == 0 {
-            if !self.search_query.trim().is_empty() {
-                let empty_col = Column::new()
-                    .spacing(spacing.space_xs)
-                    .align_x(cosmic::iced::Alignment::Center)
-                    .padding(spacing.space_m)
-                    .push(widget::icon::from_name("system-search-symbolic").size(24))
-                    .push(text::caption(format!("No notes match \"{}\"", self.search_query)))
-                    .push(
-                        button::text("Clear Filter")
-                            .class(cosmic::theme::Button::Text)
-                            .on_press(Message::ToggleSearch),
-                    );
-                note_items = note_items.push(empty_col);
-            } else if let Some(ref tag) = self.selected_tag {
-                let empty_col = Column::new()
-                    .spacing(spacing.space_xs)
-                    .align_x(cosmic::iced::Alignment::Center)
-                    .padding(spacing.space_m)
-                    .push(widget::icon::from_name("tag-symbolic").size(24))
-                    .push(text::caption(format!("No notes tagged #{tag}")))
-                    .push(
-                        button::text("Show All Notes")
-                            .class(cosmic::theme::Button::Text)
-                            .on_press(Message::FilterByTag(None)),
-                    );
-                note_items = note_items.push(empty_col);
-            } else {
-                let empty_col = Column::new()
-                    .spacing(spacing.space_xs)
-                    .align_x(cosmic::iced::Alignment::Center)
-                    .padding(spacing.space_m)
-                    .push(widget::icon::from_name("document-new-symbolic").size(24))
-                    .push(text::caption("No notes yet"))
-                    .push(
-                        button::text("Create Note")
-                            .class(cosmic::theme::Button::Suggested)
-                            .on_press(Message::CreateNewNote),
-                    );
-                note_items = note_items.push(empty_col);
-            }
-        }
-
         let sidebar = container(
-            sidebar_col.push(scrollable(note_items).width(Length::Fill).height(Length::Fill))
+            sidebar_col.push(explorer_content)
         )
         .class(cosmic::theme::Container::Background)
         .width(Length::Fixed(260.0))

@@ -11,6 +11,10 @@
 
 [Features](#-features) • [Architecture](#-architecture) • [Getting Started](#-getting-started) • [Quality Assurance](#-quality-assurance) • [Roadmap](#-roadmap)
 
+<p align="center">
+  <img src="docs/screenshots/cosmic_notes_preview.png" alt="COSMIC Notes on Pop!_OS COSMIC Desktop" width="90%" />
+</p>
+
 </div>
 
 ---
@@ -28,24 +32,33 @@ COSMIC Notes pairs this open-file philosophy with the visual elegance and speed 
 ## ✨ Features
 
 - ⚡ **Native COSMIC Experience**: Built with [`libcosmic`](https://github.com/pop-os/libcosmic) using The Elm Architecture (TEA) and GPU-accelerated rendering. Harmonizes directly with system accents, light/dark themes, and COSMIC HIG.
+- 📁 **Hierarchical Folder Tree**:
+  - Collapsible directory tree (chevron-style `▶` / `▼`) with folder icons, note count badges, and indented nesting.
+  - Multi-method folder creation: top header button, sidebar `+` button, inline tree row, modal dialog (`Ctrl+Shift+N`), and path-based auto-creation (`Ideas/App/note.md`).
+  - Full folder lifecycle: create notes inside folders, create nested subfolders, inline folder rename, and safe folder deletion to trash.
 - 📐 **Symmetrical 3-Pane Navigation**:
-  - **Explorer Column (Left, 260px)**: Fast note browsing, folder counts, and clickable `#tag` filtering.
+  - **Explorer Column (Left, 260px)**: Fast note browsing, folder tree, note counts, and clickable `#tag` filtering.
   - **Distraction-Free Canvas (Center)**: Borderless text editor with seamless writing surface and zero outline rings.
   - **Inspector Column (Right, 260px)**: Real-time telemetry (word count, reading time), tag badges, and bidirectional link topology.
 - 🪟 **Resizable Split Workspace (`pane_grid`)**:
-  - **Edit Mode**: Focused typing canvas.
-  - **Split Mode**: Resizable side-by-side editing and live Markdown preview with synchronized cursor-driven scrolling.
-  - **Preview Mode**: Clean, full-canvas reading view.
+  - **Edit Mode**: Focused typing canvas (`Ctrl+1`).
+  - **Split Mode**: Resizable side-by-side editing and live Markdown preview with synchronized cursor-driven scrolling (`Ctrl+2`).
+  - **Preview Mode**: Clean, full-canvas reading view (`Ctrl+3`).
+
+<p align="center">
+  <img src="docs/screenshots/cosmic_notes_workspace.jpg" alt="COSMIC Notes Workspace" width="90%" />
+</p>
+
 - 🔍 **Dual-Tier Sub-Millisecond Search**:
-  - **Microsecond Fuzzy Matcher**: Powered by [`nucleo`](https://github.com/helix-editor/nucleo) for $<0.1\text{ ms}$ search across titles, paths, and tags.
-  - **Tantivy BM25 Full-Text Index**: Disk-persisted inverted index with field boosting and keyword snippet highlighting in $<0.5\text{ ms}$.
+  - **Microsecond Quick Switcher (`Ctrl+P`)**: Powered by [`nucleo`](https://github.com/helix-editor/nucleo) for $<0.1\text{ ms}$ search across titles, paths, and tags.
+  - **Tantivy BM25 Full-Text Deep Search (`Ctrl+Shift+F`)**: Disk-persisted inverted index with field boosting and keyword snippet highlighting in $<0.5\text{ ms}$.
 - 🕸️ **Bidirectional Knowledge Graph**:
   - Author with `[[wikilinks]]`.
   - Automatic incoming backlink detection and outgoing link resolution powered by [`petgraph`](https://github.com/petgraph/petgraph).
   - Visual indicators for resolved notes and uncreated ghost notes (`⤑`).
 - 🛡️ **Reliability & Safety**:
   - **Write-Echo Cancellation**: Thread-safe `WriteEchoCache` with atomic tokens prevents filesystem watcher loops during auto-saves.
-  - **Safe Deletion**: Deleting notes safely moves files to the system trash bin using the [`trash`](https://crates.io/crates/trash) crate (no unrecoverable deletions).
+  - **Safe Deletion**: Deleting notes and folders safely moves files to the system trash bin using the [`trash`](https://crates.io/crates/trash) crate (no unrecoverable deletions).
 
 ---
 
@@ -116,7 +129,7 @@ flowchart TD
 
 COSMIC Notes undergoes continuous **Design QA** and Quality of Life (QoL) audits based on industry-standard UI/UX methodologies:
 - Evaluated against [Business of Apps QA Framework](https://www.businessofapps.com/insights/the-role-of-quality-assurance-in-ui-ux-design/) and [AppLighter Mobile/Desktop Testing Pillars](https://www.applighter.com/blog/app-quality-assurance).
-- Comprehensive audit report available in [`QOL_REPORT.md`](QOL_REPORT.md).
+- Rigorous automated smoke and boundary regression testing suite (`tests/smoke_regression.rs`).
 - Strict Conventional Commits v1.0.0 git standards maintained across all branches.
 
 ---
@@ -131,7 +144,8 @@ COSMIC Notes undergoes continuous **Design QA** and Quality of Life (QoL) audits
 | **M3: COSMIC Shell** | `v0.4.0-alpha` | **Symmetrical 3-Pane Workspace** | **Completed** | Dual 260px docked panels (Explorer & Inspector), pill search input, context drawer telemetry, pane grid workspace with AST caching (120 FPS target). |
 | **M4: Search Experience** | `v0.5.0-beta` | **Modal Overlays & Hotkeys** | **Completed** | Floating Quick Switcher palette (`Ctrl+P`), deep-search overlay panel (`Ctrl+Shift+F`), tooltips, keyboard navigation, and zero-match states. |
 | **M5: Ecosystem Extensibility** | `v0.6.0-beta` | **Sync & Agent Abstractions** | **Completed** | Trait definitions for `VaultSyncEngine` (`gix`/`git2`), MCP-compatible `AgentVaultApi` (`read_note`, `write_note`, `search_notes`, `get_backlinks`), JSON schema tool definitions. |
-| **M6: Quality & Governance** | `v0.7.0-beta` | **Quality Engineering & Verification** | **Active** | Hurff 5-State UI audit across all views, automated smoke & boundary test suite, Antigravity deterministic hooks, and 4-phase Release Checkpoint Matrix. |
+| **M6: Vault Hierarchy & Folders** | `v0.7.0-beta` | **Folder Organization & Hierarchy** | **Completed** | Collapsible chevron folder tree, multi-level folder creation (header, inline, modal, path-based), folder context management (rename, delete to trash, subfolder), search UI visual audit. |
+| **M7: Quality & Governance** | `v0.8.0-beta` | **Quality Engineering & Verification** | **Active** | Hurff 5-State UI audit across all views, automated smoke & boundary test suite, Antigravity deterministic hooks, and 4-phase Release Checkpoint Matrix. |
 | **v1.0: GA Release** | `v1.0.0` | **General Availability** | **Planned** | Packaging (Flatpak/COSMIC Store), settings persistence via `cosmic-config`, first stable user release. |
 
 ---

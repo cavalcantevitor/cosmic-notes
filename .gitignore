@@ -15,3 +15,7 @@
 # OS specific files
 .DS_Store
 Thumbs.db
+
+# Internal QA & Planning Docs
+QOL_REPORT.md
+*.docx

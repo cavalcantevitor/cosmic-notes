@@ -10,7 +10,7 @@ pub use agent::{
     mcp_tool_definitions,
 };
 pub use core::{
-    Frontmatter, Note, Result, Vault, VaultError, VaultEvent, VaultWatcher, Wikilink,
+    Frontmatter, Note, Result, Vault, VaultError, VaultEvent, VaultFolder, VaultWatcher, Wikilink,
     WriteEchoCache,
 };
 pub use graph::{BacklinkInfo, GraphData, GraphEdge, GraphNode, KnowledgeGraph, OutgoingLinkInfo};
