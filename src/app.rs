@@ -1,5 +1,4 @@
 use cosmic::app::{ContextDrawer, Core, Task};
-use cosmic::iced::widget::lazy;
 use cosmic::iced::widget::scrollable::{self as iced_scrollable, RelativeOffset};
 use cosmic::iced::Length;
 use cosmic::widget::pane_grid;
@@ -58,6 +57,8 @@ pub struct AppModel {
     selected_note_path: Option<PathBuf>,
     active_note: Option<Note>,
     editor_content: EditorContent,
+    parsed_markdown: Vec<widget::markdown::Item>,
+    content_hash: u64,
     panes: pane_grid::State<PaneKind>,
     view_mode: ViewMode,
     search_query: String,
@@ -118,6 +119,16 @@ Click **New Note** above or start editing right here!
             .map(|n| EditorContent::with_text(&n.raw_content))
             .unwrap_or_else(EditorContent::new);
 
+        let content_hash = active
+            .as_ref()
+            .map(|n| calculate_content_hash(&n.raw_content))
+            .unwrap_or(0);
+
+        let parsed_markdown = active
+            .as_ref()
+            .map(|n| widget::markdown::parse(&n.body).collect())
+            .unwrap_or_default();
+
         let open_tabs = selected.iter().cloned().collect();
 
         // Initialize 50/50 vertical pane grid for Split mode
@@ -133,6 +144,8 @@ Click **New Note** above or start editing right here!
             selected_note_path: selected,
             active_note: active,
             editor_content,
+            parsed_markdown,
+            content_hash,
             panes,
             view_mode: ViewMode::Split,
             search_query: String::new(),
@@ -238,6 +251,8 @@ impl cosmic::Application for AppModel {
                 }
                 if let Ok(note) = self.vault.read_note(&path) {
                     self.editor_content = EditorContent::with_text(&note.raw_content);
+                    self.content_hash = calculate_content_hash(&note.raw_content);
+                    self.parsed_markdown = widget::markdown::parse(&note.body).collect();
                     self.active_note = Some(note);
                     self.selected_note_path = Some(path);
                 }
@@ -249,6 +264,8 @@ impl cosmic::Application for AppModel {
                 if let Ok(note) = self.vault.write_note(Path::new(&filename), &initial_content) {
                     let _ = self.vault_index.update_note(&note);
                     self.editor_content = EditorContent::with_text(&note.raw_content);
+                    self.content_hash = calculate_content_hash(&note.raw_content);
+                    self.parsed_markdown = widget::markdown::parse(&note.body).collect();
                     self.open_tabs.push(note.path.clone());
                     self.selected_note_path = Some(note.path.clone());
                     self.active_note = Some(note.clone());
@@ -261,6 +278,12 @@ impl cosmic::Application for AppModel {
 
                 if is_edit {
                     let current_text = self.editor_content.text();
+                    let new_hash = calculate_content_hash(&current_text);
+                    if new_hash != self.content_hash {
+                        self.content_hash = new_hash;
+                        self.parsed_markdown = widget::markdown::parse(&current_text).collect();
+                    }
+
                     // Auto-save to vault with write-echo cancellation
                     if let Some(ref path) = self.selected_note_path {
                         if let Ok(updated_note) = self.vault.write_note(path, &current_text) {
@@ -317,6 +340,8 @@ impl cosmic::Application for AppModel {
                     if let Some(next_path) = next {
                         if let Ok(note) = self.vault.read_note(&next_path) {
                             self.editor_content = EditorContent::with_text(&note.raw_content);
+                            self.content_hash = calculate_content_hash(&note.raw_content);
+                            self.parsed_markdown = widget::markdown::parse(&note.body).collect();
                             self.active_note = Some(note);
                             self.selected_note_path = Some(next_path);
                         }
@@ -324,6 +349,8 @@ impl cosmic::Application for AppModel {
                         self.active_note = None;
                         self.selected_note_path = None;
                         self.editor_content = EditorContent::new();
+                        self.content_hash = 0;
+                        self.parsed_markdown.clear();
                     }
                 }
             }
@@ -507,11 +534,7 @@ impl cosmic::Application for AppModel {
         .padding(spacing.space_s);
 
         // 2. Center Workspace: Pure distraction-free writing surface
-        let center_content: Element<'_, Self::Message> = if let Some(ref note) = self.active_note {
-            let raw_text = self.editor_content.text();
-            let note_path_str = note.path.to_string_lossy().to_string();
-            let content_hash = calculate_content_hash(&raw_text);
-
+        let center_content: Element<'_, Self::Message> = if let Some(ref _note) = self.active_note {
             let editor_widget = te::text_editor(&self.editor_content)
                 .placeholder("Type your markdown note here...")
                 .on_action(Message::EditorAction)
@@ -527,35 +550,25 @@ impl cosmic::Application for AppModel {
                 })
                 .height(Length::Fill);
 
-            let build_preview = |path: String, text: String, hash: u64| -> Element<'static, Self::Message> {
-                lazy((path, hash), move |_| -> Element<'static, Self::Message> {
-                    let items: Vec<widget::markdown::Item> = widget::markdown::parse(&text).collect();
-                    let static_items: &'static [widget::markdown::Item] = Box::leak(items.into_boxed_slice());
-                    let style = widget::markdown::Style::from_palette(cosmic::iced::theme::Palette::DARK);
-                    let md_settings = widget::markdown::Settings::with_style(style);
-                    let md_view = widget::markdown::view(static_items, md_settings)
-                        .map(|_| Message::LinkClicked);
+            let style = widget::markdown::Style::from_palette(cosmic::iced::theme::Palette::DARK);
+            let md_settings = widget::markdown::Settings::with_style(style);
+            let md_view = widget::markdown::view(&self.parsed_markdown, md_settings)
+                .map(|_| Message::LinkClicked);
 
-                    scrollable(
-                        Column::new()
-                            .spacing(spacing.space_m)
-                            .push(md_view)
-                    )
-                    .id(ScrollId::new("preview-scroll"))
-                    .height(Length::Fill)
-                    .width(Length::Fill)
-                    .into()
-                })
-                .into()
-            };
-
-            let preview_view: Element<'_, Self::Message> = build_preview(note_path_str.clone(), raw_text.clone(), content_hash);
+            let preview_view = scrollable(
+                Column::new()
+                    .spacing(spacing.space_m)
+                    .push(md_view)
+            )
+            .id(ScrollId::new("preview-scroll"))
+            .height(Length::Fill)
+            .width(Length::Fill);
 
             let body_surface: Element<'_, Self::Message> = match self.view_mode {
                 ViewMode::Editor => editor_widget.into(),
-                ViewMode::Preview => preview_view,
+                ViewMode::Preview => preview_view.into(),
                 ViewMode::Split => {
-                    let grid = cosmic::widget::pane_grid(&self.panes, move |_pane, kind, _maximized| {
+                    let grid = cosmic::widget::pane_grid(&self.panes, |_pane, kind, _maximized| {
                         let content: Element<'_, Self::Message> = match *kind {
                             PaneKind::Editor => {
                                 let ed = te::text_editor(&self.editor_content)
@@ -578,7 +591,20 @@ impl cosmic::Application for AppModel {
                                     .into()
                             }
                             PaneKind::Preview => {
-                                let prev = build_preview(note_path_str.clone(), raw_text.clone(), content_hash);
+                                let style = widget::markdown::Style::from_palette(cosmic::iced::theme::Palette::DARK);
+                                let md_settings = widget::markdown::Settings::with_style(style);
+                                let md_view = widget::markdown::view(&self.parsed_markdown, md_settings)
+                                    .map(|_| Message::LinkClicked);
+
+                                let prev = scrollable(
+                                    Column::new()
+                                        .spacing(spacing.space_m)
+                                        .push(md_view)
+                                )
+                                .id(ScrollId::new("preview-scroll"))
+                                .height(Length::Fill)
+                                .width(Length::Fill);
+
                                 container(prev)
                                     .width(Length::Fill)
                                     .height(Length::Fill)
