@@ -992,6 +992,7 @@ dependencies = [
  "petgraph",
  "pulldown-cmark 0.13.4",
  "serde",
+ "serde_json",
  "serde_yaml",
  "tantivy",
  "tempfile",

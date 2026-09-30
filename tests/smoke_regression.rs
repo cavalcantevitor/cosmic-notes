@@ -1,7 +1,10 @@
+use cosmic_notes::agent::{AgentVaultApi, DefaultAgentVaultApi, mcp_tool_definitions};
 use cosmic_notes::core::{Vault, WriteEchoCache};
 use cosmic_notes::search::VaultIndex;
+use cosmic_notes::sync::{MockSyncEngine, VaultSyncEngine};
 use std::fs;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tempfile::tempdir;
 
@@ -198,4 +201,64 @@ fn test_m4_search_experience_and_indexing() {
     let complex_query = index.fulltext_search("rust + modern: (async/await)", 10);
     assert!(complex_query.is_ok(), "Query syntax with symbols must not panic or error");
 }
+
+#[test]
+fn test_m5_extensibility_sync_and_agent_api() {
+    let dir = tempdir().expect("Failed to create temp dir");
+    let vault = Arc::new(Vault::open(dir.path()).expect("Failed to open vault"));
+    let notes = vault.scan_notes().unwrap();
+    let index = Arc::new(Mutex::new(
+        VaultIndex::open_or_create(&dir.path().join(".cosmic-notes/index"), &notes)
+            .expect("Index build must succeed"),
+    ));
+
+    // 1. Verify MCP tool schemas
+    let tools = mcp_tool_definitions();
+    assert_eq!(tools.len(), 5);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+    assert!(tool_names.contains(&"vault_read_note"));
+    assert!(tool_names.contains(&"vault_write_note"));
+    assert!(tool_names.contains(&"vault_search_notes"));
+    assert!(tool_names.contains(&"vault_get_backlinks"));
+    assert!(tool_names.contains(&"vault_list_notes"));
+
+    // 2. Programmatic AgentVaultApi workflow
+    let agent_api = DefaultAgentVaultApi::new(vault.clone(), index.clone());
+
+    let note_path = Path::new("ai/summary.md");
+    let created = agent_api.write_note(
+        note_path,
+        "---\ntitle: AI Architecture\ntags: [mcp, llm]\n---\n# AI Architecture\nExplaining [[Model Context Protocol]].",
+    ).expect("Agent note write must succeed");
+    assert_eq!(created.title, "AI Architecture");
+    assert_eq!(created.tags, vec!["llm", "mcp"]);
+
+    let read_back = agent_api.read_note(note_path).expect("Agent note read must succeed");
+    assert!(read_back.content.contains("Model Context Protocol"));
+
+    let list = agent_api.list_notes().unwrap();
+    assert!(list.contains(&note_path.to_path_buf()));
+
+    let search_res = agent_api.search_notes("Protocol", 5).unwrap();
+    assert!(!search_res.is_empty());
+    assert_eq!(search_res[0].path, note_path);
+
+    // 3. VaultSyncEngine abstraction workflow
+    let sync_engine = MockSyncEngine::new();
+    let status = sync_engine.status(dir.path()).unwrap();
+    assert!(status.is_git_repo);
+    assert_eq!(status.branch.as_deref(), Some("main"));
+
+    let staged = sync_engine.stage_all(dir.path()).unwrap();
+    assert_eq!(staged, 0); // Mock engine returns 0 staged
+
+    let commit = sync_engine.commit(dir.path(), "feat(ai): add AI architecture note").unwrap();
+    assert_eq!(commit.message, "feat(ai): add AI architecture note");
+    assert!(!commit.hash.is_empty());
+
+    let push = sync_engine.push(dir.path()).unwrap();
+    assert_eq!(push.pushed_commits, 1);
+    assert_eq!(push.conflicts.len(), 0);
+}
+
 

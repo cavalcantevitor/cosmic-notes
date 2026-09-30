@@ -100,7 +100,12 @@ impl FuzzyEngine {
         );
 
         // Run matching ticks until finished or timed out
-        matcher.tick(10);
+        for _ in 0..5 {
+            let status = matcher.tick(10);
+            if !status.running {
+                break;
+            }
+        }
 
         let snapshot = matcher.snapshot();
         let total_matches = snapshot.matched_item_count();
@@ -131,6 +136,14 @@ impl FuzzyEngine {
             injector.push(item.clone(), |_, cols| {
                 cols[0] = utf32;
             });
+        }
+        drop(injector);
+        let mut new_matcher = new_matcher;
+        for _ in 0..5 {
+            let status = new_matcher.tick(10);
+            if !status.running {
+                break;
+            }
         }
         *self.matcher.lock().unwrap() = new_matcher;
     }

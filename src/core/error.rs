@@ -38,6 +38,12 @@ pub enum VaultError {
 
     #[error("Query parse error: {0}")]
     QueryError(String),
+
+    #[error("Vault sync error: {0}")]
+    SyncError(String),
+
+    #[error("Agent API error: {0}")]
+    AgentApiError(String),
 }
 
 

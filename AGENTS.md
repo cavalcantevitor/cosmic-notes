@@ -146,17 +146,25 @@ Every commit in this repository MUST strictly follow the [Conventional Commits v
    - UI/UX Design QA and Quality of Life audit completed ([`QOL_REPORT.md`](file:///home/cavalcantevitor/Documents/codex_projects/personal_projects/cosmic_notes/QOL_REPORT.md)).
    - Full test suite passing (18/18 unit and integration tests passing, 0 warnings).
 
+5. **Milestone 4 (M4: Search Experience — `v0.5.0-beta`)**:
+   - Global `Ctrl+P` modal quick-switcher palette with `nucleo` fuzzy matching over note titles, paths, and tags.
+   - Global `Ctrl+Shift+F` full-text deep search overlay with Tantivy BM25 highlighted snippets and field boosting.
+   - Global keyboard accelerators (`Ctrl+\`, `Ctrl+N`, `Ctrl+1/2/3`, `Ctrl+F`, `Ctrl+P`, `Ctrl+Shift+F`, `Ctrl+I`).
+   - Modal arrow navigation (`ArrowDown`, `ArrowUp`, `Enter`, `Escape`).
+   - System tooltips on header actions and Hurff zero-match empty search states.
+6. **Milestone 5 (M5: Ecosystem Extensibility — `v0.6.0-beta`)**:
+   - Trait definition `VaultSyncEngine` (`src/sync/mod.rs`) for pluggable Git synchronization (`GitCliSyncEngine`, `MockSyncEngine`).
+   - Trait definition `AgentVaultApi` (`src/agent/mod.rs`) for AI Agents with `DefaultAgentVaultApi`.
+   - 100% Model Context Protocol (MCP) tool definitions (`vault_read_note`, `vault_write_note`, `vault_search_notes`, `vault_get_backlinks`, `vault_list_notes`).
+   - End-to-end integration and smoke tests in `tests/smoke_regression.rs`.
+
 ### Active Milestone:
-* **Milestone 4 (M4: Search Experience — `v0.5.0-beta`)**:
-  - Global `Ctrl+P` modal quick-switcher palette with `nucleo` fuzzy matching.
-  - Global `Ctrl+Shift+F` full-text deep search overlay with Tantivy BM25 highlighted snippets.
-  - Prioritized QoL improvements: system tooltips on header buttons, keyboard accelerators (`Ctrl+N`, `Ctrl+1/2/3`), and friendly zero-match empty search states.
+* **Milestone 6 (M6: Quality & Governance — `v0.7.0-beta`)**:
+  - Full Hurff 5-State UI audit across all views.
+  - Release Checkpoint Matrix (Architecture & Security, UX Resilience, Quantitative Performance, Functional QA & Regression).
+  - Continuous deterministic quality verification via `./scripts/verify.sh`.
 
 ### Planned Future Milestones:
-* **Milestone 5 (M5: Ecosystem Extensibility — `v0.6.0-beta`)**:
-  - Trait definitions for `VaultSyncEngine` (`gix`/`git2`) and MCP-compatible `AgentVaultApi` (`cosmic::iced::stream::channel`).
-* **Milestone 6 (M6: Quality & Governance — `v0.7.0-beta`)**:
-  - Hurff 5-State UI audit across all views, automated smoke & boundary test suite, Antigravity deterministic hooks, and 4-phase Release Checkpoint Matrix.
 * **v1.0: GA Release (`v1.0.0`)**:
   - Packaging (Flatpak/COSMIC Store), settings persistence via `cosmic-config`, first stable user release.
 

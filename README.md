@@ -129,9 +129,9 @@ COSMIC Notes undergoes continuous **Design QA** and Quality of Life (QoL) audits
 | **M1: Core Editor** | `v0.2.0-alpha` | **Desktop Shell & Editing** | **Completed** | Native `libcosmic` shell (`src/app.rs`), interactive `cosmic-text` buffer, live split-preview, atomic disk saves, safe trash deletion. |
 | **M2: Knowledge & Search** | `v0.3.0-alpha` | **Indexing & Bidirectional Links** | **Completed** | In-memory `nucleo` fuzzy switcher, `tantivy` BM25 inverted index in `.cosmic-notes/index/`, `petgraph` link graph, backlink/orphan resolution. |
 | **M3: COSMIC Shell** | `v0.4.0-alpha` | **Symmetrical 3-Pane Workspace** | **Completed** | Dual 260px docked panels (Explorer & Inspector), pill search input, context drawer telemetry, pane grid workspace with AST caching (120 FPS target). |
-| **M4: Search Experience** | `v0.5.0-beta` | **Modal Overlays & Hotkeys** | **Active** | Floating Quick Switcher palette (`Ctrl+P`), deep-search overlay panel (`Ctrl+Shift+F`), tooltips, keyboard navigation, and zero-match states. |
-| **M5: Ecosystem Extensibility** | `v0.6.0-beta` | **Sync & Agent Abstractions** | **Planned** | Trait definitions for `VaultSyncEngine` (`gix`/`git2`) and MCP-compatible `AgentVaultApi` (`cosmic::iced::stream::channel`). |
-| **M6: Quality & Governance** | `v0.7.0-beta` | **Quality Engineering & Verification** | **Planned** | Hurff 5-State UI audit across all views, automated smoke & boundary test suite, Antigravity deterministic hooks, and 4-phase Release Checkpoint Matrix. |
+| **M4: Search Experience** | `v0.5.0-beta` | **Modal Overlays & Hotkeys** | **Completed** | Floating Quick Switcher palette (`Ctrl+P`), deep-search overlay panel (`Ctrl+Shift+F`), tooltips, keyboard navigation, and zero-match states. |
+| **M5: Ecosystem Extensibility** | `v0.6.0-beta` | **Sync & Agent Abstractions** | **Completed** | Trait definitions for `VaultSyncEngine` (`gix`/`git2`), MCP-compatible `AgentVaultApi` (`read_note`, `write_note`, `search_notes`, `get_backlinks`), JSON schema tool definitions. |
+| **M6: Quality & Governance** | `v0.7.0-beta` | **Quality Engineering & Verification** | **Active** | Hurff 5-State UI audit across all views, automated smoke & boundary test suite, Antigravity deterministic hooks, and 4-phase Release Checkpoint Matrix. |
 | **v1.0: GA Release** | `v1.0.0` | **General Availability** | **Planned** | Packaging (Flatpak/COSMIC Store), settings persistence via `cosmic-config`, first stable user release. |
 
 ---
