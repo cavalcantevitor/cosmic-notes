@@ -148,7 +148,7 @@ impl cosmic::Application for AppModel {
     }
 
     fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
-        let sidebar_toggle = button::icon(widget::icon::from_name("view-sidebar-symbolic").size(18))
+        let sidebar_toggle = button::icon(widget::icon::from_name("sidebar-places-symbolic").size(18))
             .class(if self.show_sidebar {
                 cosmic::theme::Button::Text
             } else {
@@ -180,9 +180,9 @@ impl cosmic::Application for AppModel {
         let mut items: Vec<Element<'_, Self::Message>> = Vec::new();
 
         if self.search_active {
-            let search_input = widget::text_input("Search notes...", &self.search_query)
+            let search_input = widget::search_input("Search notes...", &self.search_query)
                 .on_input(Message::SearchInputChanged)
-                .width(Length::Fixed(220.0));
+                .width(Length::Fixed(240.0));
             items.push(search_input.into());
         }
 
@@ -345,10 +345,10 @@ impl cosmic::Application for AppModel {
         let note = self.active_note.as_ref()?;
         let spacing = cosmic::theme::spacing();
 
-        // 1. Statistics
+        // 1. Properties
         let telemetry_col = Column::new()
             .spacing(spacing.space_xxs)
-            .push(text::body("Statistics"))
+            .push(text::caption("PROPERTIES"))
             .push(
                 Row::new()
                     .spacing(spacing.space_s)
@@ -381,7 +381,7 @@ impl cosmic::Application for AppModel {
             );
 
         // 2. Tags Section
-        let mut tags_col = Column::new().spacing(spacing.space_xs).push(text::body("Tags"));
+        let mut tags_col = Column::new().spacing(spacing.space_xs).push(text::caption("TAGS"));
         if note.tags.is_empty() {
             tags_col = tags_col.push(text::caption("No tags in this note"));
         } else {
@@ -389,7 +389,7 @@ impl cosmic::Application for AppModel {
             for tag in &note.tags {
                 let tag_btn = button::text(format!("#{tag}"))
                     .class(cosmic::theme::Button::Text)
-                    .padding([spacing.space_xxs, spacing.space_xs])
+                    .padding([spacing.space_xs, spacing.space_s])
                     .on_press(Message::FilterByTag(Some(tag.clone())));
                 tags_list = tags_list.push(tag_btn);
             }
@@ -400,7 +400,7 @@ impl cosmic::Application for AppModel {
         let backlinks = self.vault_index.backlinks(&note.path);
         let outgoing = self.vault_index.outgoing_links(&note.path);
 
-        let mut graph_col = Column::new().spacing(spacing.space_xs).push(text::body("Connections"));
+        let mut graph_col = Column::new().spacing(spacing.space_xs).push(text::caption("CONNECTIONS"));
 
         // Backlinks
         graph_col = graph_col.push(text::caption(format!("Incoming Backlinks ({})", backlinks.len())));
@@ -410,6 +410,7 @@ impl cosmic::Application for AppModel {
             for bl in backlinks {
                 let bl_btn = button::text(format!("← {}", bl.source_title))
                     .class(cosmic::theme::Button::Text)
+                    .padding([spacing.space_xs, spacing.space_s])
                     .on_press(Message::SelectNote(bl.source_path));
                 graph_col = graph_col.push(bl_btn);
             }
@@ -424,6 +425,7 @@ impl cosmic::Application for AppModel {
                 if let Some(target_path) = link.resolved_path {
                     let link_btn = button::text(format!("→ {}", link.target))
                         .class(cosmic::theme::Button::Text)
+                        .padding([spacing.space_xs, spacing.space_s])
                         .on_press(Message::SelectNote(target_path));
                     graph_col = graph_col.push(link_btn);
                 } else {
@@ -461,10 +463,10 @@ impl cosmic::Application for AppModel {
         all_tags.sort();
         all_tags.dedup();
 
-        let mut sidebar_col = Column::new().spacing(spacing.space_xs);
+        let mut sidebar_col = Column::new().spacing(spacing.space_s);
 
-        // "All Notes" section item
-        let all_notes_icon = widget::icon::from_name("edit-copy-symbolic").size(16);
+        // Section 1: LIBRARY
+        let all_notes_icon = widget::icon::from_name("folder-symbolic").size(16);
         let all_notes_row = Row::new()
             .spacing(spacing.space_xs)
             .align_y(cosmic::iced::Alignment::Center)
@@ -474,7 +476,7 @@ impl cosmic::Application for AppModel {
 
         let mut all_notes_btn = button::custom(all_notes_row)
             .width(Length::Fill)
-            .padding([spacing.space_xxs, spacing.space_xs])
+            .padding([spacing.space_xs, spacing.space_s])
             .on_press(Message::FilterByTag(None));
 
         if self.selected_tag.is_none() && self.search_query.trim().is_empty() {
@@ -482,27 +484,28 @@ impl cosmic::Application for AppModel {
         } else {
             all_notes_btn = all_notes_btn.class(cosmic::theme::Button::Text);
         }
-        sidebar_col = sidebar_col.push(all_notes_btn);
 
-        // Tags Section
+        let library_group = Column::new()
+            .spacing(spacing.space_xxs)
+            .push(text::caption("LIBRARY"))
+            .push(all_notes_btn);
+        sidebar_col = sidebar_col.push(library_group);
+
+        // Section 2: TAGS (if any exist)
         if !all_tags.is_empty() {
-            let tags_header = Row::new()
-                .spacing(spacing.space_xs)
-                .align_y(cosmic::iced::Alignment::Center)
-                .push(widget::icon::from_name("tag-symbolic").size(14))
-                .push(text::caption("Tags").width(Length::Fill));
-            sidebar_col = sidebar_col.push(tags_header);
+            let mut tags_group = Column::new().spacing(spacing.space_xxs).push(text::caption("TAGS"));
 
             for tag in all_tags {
                 let is_tag_selected = self.selected_tag.as_deref() == Some(&tag);
                 let tag_row = Row::new()
                     .spacing(spacing.space_xs)
                     .align_y(cosmic::iced::Alignment::Center)
-                    .push(text::caption(format!("#{tag}")).width(Length::Fill));
+                    .push(widget::icon::from_name("tag-symbolic").size(14))
+                    .push(text::body(format!("#{tag}")).width(Length::Fill));
 
                 let mut tag_btn = button::custom(tag_row)
                     .width(Length::Fill)
-                    .padding([spacing.space_xxs, spacing.space_xs])
+                    .padding([spacing.space_xs, spacing.space_s])
                     .on_press(Message::FilterByTag(if is_tag_selected {
                         None
                     } else {
@@ -514,11 +517,25 @@ impl cosmic::Application for AppModel {
                 } else {
                     tag_btn = tag_btn.class(cosmic::theme::Button::Text);
                 }
-                sidebar_col = sidebar_col.push(tag_btn);
+                tags_group = tags_group.push(tag_btn);
             }
+
+            sidebar_col = sidebar_col
+                .push(widget::divider::horizontal::default())
+                .push(tags_group);
         }
 
         sidebar_col = sidebar_col.push(widget::divider::horizontal::default());
+
+        // Section 3: NOTES
+        let notes_header = if !self.search_query.trim().is_empty() {
+            text::caption("SEARCH RESULTS")
+        } else if let Some(ref tag) = self.selected_tag {
+            text::caption(format!("TAG: #{}", tag.to_uppercase()))
+        } else {
+            text::caption("NOTES")
+        };
+        sidebar_col = sidebar_col.push(notes_header);
 
         let render_note_item = |note: &Note, is_selected: bool| -> Element<'static, Message> {
             let title = if note.title.is_empty() {
@@ -538,7 +555,7 @@ impl cosmic::Application for AppModel {
 
             let mut item_btn = button::custom(row_content)
                 .width(Length::Fill)
-                .padding([spacing.space_xxs, spacing.space_xs])
+                .padding([spacing.space_xs, spacing.space_s])
                 .on_press(Message::SelectNote(note.path.clone()));
 
             if is_selected {
@@ -578,7 +595,7 @@ impl cosmic::Application for AppModel {
             sidebar_col.push(scrollable(note_items).width(Length::Fill).height(Length::Fill))
         )
         .class(cosmic::theme::Container::Background)
-        .width(Length::Fixed(240.0))
+        .width(Length::Fixed(260.0))
         .padding(spacing.space_s);
 
         // 2. Main Workspace Area: Pure distraction-free writing surface

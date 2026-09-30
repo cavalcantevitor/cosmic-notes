@@ -151,6 +151,15 @@ Every commit in this repository MUST strictly follow the [Conventional Commits v
      - Tags badges with click-to-filter capability.
      - Bidirectional links inspector (incoming backlinks & outgoing wikilinks with direct note navigation).
    - Full test suite passing (17 unit tests + 1 integration test, 0 failures, 0 warnings).
+7. **Phase 3.5: Polish & Cohesive Navigation Architecture (`src/app.rs`)**:
+   - Fixed sidebar toggle icon by using `"sidebar-places-symbolic"` (the official Pop!_OS and `cosmic-icons` theme identifier used by `cosmic-files`).
+   - Restyled inline search with native `widget::search_input` featuring capsule/pill border radius (`radius_xl`) and inset search glyph.
+   - Harmonized visual language between Left Sidebar and Right Context Drawer:
+     - Standardized uppercase section captions (`LIBRARY`, `TAGS`, `NOTES` vs. `PROPERTIES`, `TAGS`, `CONNECTIONS`).
+     - Matching button padding (`[spacing.space_xs, spacing.space_s]`) and rounded corner highlights.
+     - Symmetrical balanced panel widths (260px sidebar, 280px drawer).
+   - Fully documented all phases in `PROJECT_NOTES.md`.
+   - Full test suite passing (17 unit tests + 1 integration test, 0 failures, 0 warnings).
 
 ### Next Session Objective:
 * **Start Phase 4: Pane Grid Workspace & 120 FPS Lazy Rendering**:

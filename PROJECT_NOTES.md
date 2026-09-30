@@ -170,7 +170,19 @@ To integrate AI capabilities (local LLMs via Ollama/llama.cpp, cloud APIs, auto-
    - The right-hand `context_drawer` will reserve an `Agent` tab alongside `Inspector` and `Backlinks`.
    - Provides a conversational chat interface with the user's active vault context.
 4. **Semantic Vector Embeddings (Alongside Tantivy)**:
-   - The `index/` module is architected to allow adding vector embeddings (e.g. via `fastembed-rs` or local ONNX) alongside Tantivy’s BM25 index, enabling hybrid search (`Keyword + Semantic`).
+### 5. Multi-Column Architecture & Native Context Drawer
+- **Sidebar Navigation**:
+  - Direct inspiration from System76's `cosmic-files` app.
+  - Multi-section hierarchy: "Library" (All Notes), "Tags" (interactive tag filtering), and "Notes" (real-time filtered note list).
+  - Collapsible via `sidebar-places-symbolic` button in the header bar.
+- **Top Header Bar**:
+  - Top-Left: Direct text menu buttons (`New Note`, `Edit`, `Split`, `Preview`).
+  - Top-Right: Pill-rounded inline search bar (`widget::search_input`) expanding directly adjacent to the magnifying glass icon (`system-search-symbolic`), alongside the Inspector toggle icon (`dialog-information-symbolic`).
+- **Native Context Drawer (`cosmic::app::ContextDrawer`)**:
+  - Housed on the right side of the window, accessible via header info button or `Ctrl+Space`.
+  - Properties & Telemetry: Word count, character count, reading time estimate, modified date, and path.
+  - Tags Inspector: Extracted `#tags` with click-to-filter capability.
+  - Connections: Interactive bidirectional link topology showing incoming backlinks and outgoing wikilinks.
 
 ---
 
@@ -199,9 +211,10 @@ To integrate AI capabilities (local LLMs via Ollama/llama.cpp, cloud APIs, auto-
 | **Phase 1** | Headless Vault Engine Foundation | **Completed** | `Note`, `Frontmatter`, inline tags, wikilinks, `WriteEchoCache`, atomic disk saves, safe trash deletion, `VaultWatcher` via `notify-debouncer-full`, passing test suite. |
 | **Phase 1+ (Bridge)** | Interactive Desktop Shell & Live Editor | **Completed** | Native `libcosmic` application (`src/app.rs`), note selection sidebar, interactive `text_editor` widget, live Split-view markdown preview, auto-save to vault. |
 | **Phase 2** | Dual-Tier Search & Knowledge Graph Engine | **Completed** | In-memory `nucleo` fuzzy matcher (`Ctrl+P`), `tantivy` BM25 inverted index in `.cosmic-notes/index/` (`Ctrl+Shift+F`), and `petgraph` bidirectional link topology with backlinks and orphan detection. |
-| **Phase 2.5** | UI/UX & Native COSMIC Files Polish | **Completed** | Native COSMIC Files styling: top-left menu actions (`New Note`, `Edit`, `Split`, `Preview`), top-right search button adjacent to window controls, dark sidebar background, breadcrumbs tab bar, and borderless editor without focus rings. |
+| **Phase 2.5** | UI/UX & Native COSMIC Files Polish | **Completed** | Native COSMIC Files styling: top-left menu actions (`New Note`, `Edit`, `Split`, `Preview`), top-right search button adjacent to window controls, dark sidebar background, and borderless editor without focus rings. Cleaned clutter (removed tabs, breadcrumbs, pencil icon). |
 | **Phase 3** | Multi-Column COSMIC Shell & Context Drawer | **Completed** | Inline header search input, collapsible sidebar with toggle button, tag filtering, and native right-hand Context Drawer with telemetry, tags, and bidirectional links. |
-| **Phase 4** | Pane Grid Workspace & 120 FPS Lazy Rendering | **Next in Line** | Resizable split layout via `cosmic::widget::pane_grid`, cached preview with `iced::widget::lazy` keyed on `(note_id, content_hash)`. |
+| **Phase 3.5** | Polish & Cohesive Navigation Architecture | **In Progress** | Fix sidebar toggle icon (`sidebar-places-symbolic`), pill-rounded search (`widget::search_input`), and unified visual harmony between left sidebar and right Context Drawer. |
+| **Phase 4** | Pane Grid Workspace & 120 FPS Lazy Rendering | **Upcoming** | Resizable split layout via `cosmic::widget::pane_grid`, cached preview with `iced::widget::lazy` keyed on `(note_id, content_hash)`. |
 | **Phase 5** | Quick Switcher & Full-Text Search Overlays | **Upcoming** | Global search palette modal (`Ctrl+P`) and full-text search results panel (`Ctrl+Shift+F`). |
 | **Phase 6** | Future-Proof Contracts (Git & AI/MCP) | **Upcoming** | `VaultSyncEngine` trait and `AgentVaultApi` MCP-ready tool abstraction. |
 
